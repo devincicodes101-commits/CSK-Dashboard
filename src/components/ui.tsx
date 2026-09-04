@@ -11,12 +11,14 @@ import type { ReactNode } from "react";
  * blocks go out in that order, to those people, every Wednesday.
  */
 export function Block({
+  id,
   ordinal,
   title,
   audience,
   note,
   children,
 }: {
+  id: string;
   ordinal: string;
   title: string;
   audience: string;
@@ -24,7 +26,12 @@ export function Block({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-surface">
+    <section
+      id={id}
+      // scroll-mt so the sidebar's anchor links do not drop the heading under
+      // the top of the viewport.
+      className="scroll-mt-8 overflow-hidden rounded-xl border border-line bg-surface"
+    >
       <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-b border-line px-6 py-4">
         <div className="flex items-baseline gap-4">
           <span className="micro text-accent">{ordinal}</span>
@@ -37,12 +44,38 @@ export function Block({
 
       <div className="px-6 py-6">{children}</div>
 
-      {note ? (
-        <footer className="flex flex-col gap-2 border-t border-line bg-surface-2 px-6 py-4">
-          {note}
-        </footer>
-      ) : null}
+      {note ? <Notes>{note}</Notes> : null}
     </section>
+  );
+}
+
+/**
+ * The corrections, folded away.
+ *
+ * They used to sit open under every block, three lines of small mono text
+ * competing with the figures they were explaining. Closed by default keeps
+ * the block readable; kept on the block, rather than moved to a page of
+ * documentation, because whoever screenshots it needs the explanation
+ * attached to the thing being explained.
+ */
+function Notes({ children }: { children: ReactNode }) {
+  return (
+    <details className="group border-t border-line bg-surface-2">
+      <summary className="micro flex cursor-pointer list-none items-center gap-2 px-6 py-3 text-ink-4 transition-colors duration-200 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
+        <svg
+          viewBox="0 0 16 16"
+          width="9"
+          height="9"
+          aria-hidden
+          fill="currentColor"
+          className="transition-transform duration-200 group-open:rotate-90"
+        >
+          <path d="M5 3 L11 8 L5 13 Z" />
+        </svg>
+        Why these differ from Jobber
+      </summary>
+      <div className="flex flex-col gap-2 px-6 pb-4">{children}</div>
+    </details>
   );
 }
 

@@ -1,5 +1,6 @@
 import { Block, Correction, EmptyBlock, Metric, Metrics, Pill } from "@/components/ui";
 import { PeriodNav } from "@/components/PeriodNav";
+import { SectionNav, type Section } from "@/components/SectionNav";
 import { computeWeek, count, money, percent } from "@/lib/week-metrics";
 import {
   type PeriodKind,
@@ -27,6 +28,18 @@ import {
  * whether any of this works; a week checked line by line against the client's
  * own spreadsheet says exactly that.
  */
+
+/**
+ * The three blocks, in the order they go out on a Wednesday morning.
+ *
+ * One list, used by both the sidebar and the blocks themselves, so a heading
+ * can never say one thing in the nav and another on the block.
+ */
+const SECTIONS: readonly Section[] = [
+  { id: "sales", ordinal: "01", title: "Sales pipeline", audience: "Chase", ready: true },
+  { id: "revenue", ordinal: "02", title: "Revenue & production", audience: "Technicians + Chad", ready: true },
+  { id: "cash", ordinal: "03", title: "Cash & AR", audience: "Chase + Alana", ready: false },
+];
 
 /** Weeks with stored figures. Becomes a Supabase query once syncing exists. */
 const SYNCED_WEEKS = [VERIFIED_WEEK_MONDAY] as const;
@@ -71,7 +84,7 @@ export default async function Dashboard({
     <div className="relative min-h-screen">
       <div className="horizon" aria-hidden />
 
-      <main className="relative z-10 mx-auto max-w-5xl px-5 pb-24 pt-12 sm:px-8 sm:pt-16">
+      <main className="relative z-10 mx-auto max-w-6xl px-5 pb-24 pt-12 sm:px-8 sm:pt-16">
         {/* ------------------------------------------------------ masthead -- */}
         <header className="mb-10">
           <div className="mb-6 flex flex-wrap items-baseline justify-between gap-4">
@@ -107,7 +120,15 @@ export default async function Dashboard({
           ) : null}
         </header>
 
-        {kind === "monthly" ? (
+        <div className="grid gap-8 lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-10">
+          {metrics ? (
+            <SectionNav sections={SECTIONS} />
+          ) : (
+            <div aria-hidden className="hidden lg:block" />
+          )}
+
+          <div className="flex min-w-0 flex-col gap-4">
+            {kind === "monthly" ? (
           <NotBuilt
             title="Monthly isn’t built yet"
             body="Efficiency compares actual against quoted, and quoted hours were blank on seven of the eight jobs in the verified week. That is a gap in what CSK record, not something the dashboard can compute around. The revenue split is buildable once the job-type field is being filled in."
@@ -121,9 +142,10 @@ export default async function Dashboard({
           <div className="flex flex-col gap-4">
             {/* --------------------------------------------------- sales -- */}
             <Block
-              ordinal="01"
-              title="Sales pipeline"
-              audience="Chase"
+              id={SECTIONS[0]!.id}
+              ordinal={SECTIONS[0]!.ordinal}
+              title={SECTIONS[0]!.title}
+              audience={SECTIONS[0]!.audience}
               note={
                 <>
                   {metrics.collapsedQuotes.length > 0 ? (
@@ -187,9 +209,10 @@ export default async function Dashboard({
 
             {/* ----------------------------------------- revenue & profit -- */}
             <Block
-              ordinal="02"
-              title="Revenue &amp; production"
-              audience="Technicians + Chad"
+              id={SECTIONS[1]!.id}
+              ordinal={SECTIONS[1]!.ordinal}
+              title={SECTIONS[1]!.title}
+              audience={SECTIONS[1]!.audience}
               note={
                 <>
                   <Correction>
@@ -238,9 +261,10 @@ export default async function Dashboard({
 
             {/* ----------------------------------------------- cash & ar -- */}
             <Block
-              ordinal="03"
-              title="Cash &amp; AR"
-              audience="Chase + Alana"
+              id={SECTIONS[2]!.id}
+              ordinal={SECTIONS[2]!.ordinal}
+              title={SECTIONS[2]!.title}
+              audience={SECTIONS[2]!.audience}
               note={
                 <Correction>
                   These five figures come from QuickBooks and not one of them
@@ -283,7 +307,9 @@ export default async function Dashboard({
               ))}
             </ul>
           </section>
-        ) : null}
+            ) : null}
+          </div>
+        </div>
 
         <footer className="mt-14 border-t border-line pt-6">
           <p className="micro text-ink-4">

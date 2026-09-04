@@ -6,7 +6,7 @@
  * API version 2025-04-16.
  */
 
-import { serviceClient } from "./supabase";
+import { loadTokens, saveTokens } from "./token-store";
 
 export const JOBBER_AUTHORIZE_URL = "https://api.getjobber.com/api/oauth/authorize";
 export const JOBBER_TOKEN_URL = "https://api.getjobber.com/api/oauth/token";
@@ -84,21 +84,12 @@ export async function saveConnection(
   tokens: TokenResponse,
   connectedAccount: string | null,
 ): Promise<void> {
-  const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
-  const { error } = await serviceClient()
-    .from("oauth_connections")
-    .upsert(
-      {
-        provider: "jobber",
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_at: expiresAt.toISOString(),
-        connected_account: connectedAccount,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "provider" },
-    );
-  if (error) throw new Error(`Could not save the Jobber connection: ${error.message}`);
+  await saveTokens("jobber", {
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token,
+    expiresAt: Date.now() + tokens.expires_in * 1000,
+    connectedAccount,
+  });
 }
 
 /**
@@ -107,27 +98,25 @@ export async function saveConnection(
  * Refreshed a minute early on purpose: a token that expires mid-sync fails
  * halfway through a week and leaves a partial snapshot, which is worse than
  * refreshing slightly too often.
+ *
+ * Jobber has refresh token rotation switched on, so each refresh invalidates
+ * the one it replaced. That has a consequence worth remembering before adding
+ * a manual "sync now" button: two refreshes racing each other will break the
+ * connection outright, because the loser is holding a token that no longer
+ * exists. One scheduled job is safe; two concurrent callers are not.
  */
 export async function accessToken(): Promise<string> {
-  const supabase = serviceClient();
-  const { data, error } = await supabase
-    .from("oauth_connections")
-    .select("access_token, refresh_token, expires_at")
-    .eq("provider", "jobber")
-    .maybeSingle();
-
-  if (error) throw new Error(`Could not read the Jobber connection: ${error.message}`);
-  if (!data) {
+  const stored = await loadTokens("jobber");
+  if (!stored) {
     throw new Error(
       "Jobber is not connected. Open Settings and connect it before syncing.",
     );
   }
 
-  const expiresAt = new Date(data.expires_at as string).getTime();
-  if (expiresAt - Date.now() > 60_000) return data.access_token as string;
+  if (stored.expiresAt - Date.now() > 60_000) return stored.accessToken;
 
-  const refreshed = await refreshTokens(data.refresh_token as string);
-  await saveConnection(refreshed, null);
+  const refreshed = await refreshTokens(stored.refreshToken);
+  await saveConnection(refreshed, stored.connectedAccount);
   return refreshed.access_token;
 }
 
