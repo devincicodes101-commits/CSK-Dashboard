@@ -67,13 +67,17 @@ export default async function Dashboard({
   /**
    * Pull the week live rather than reading a stored snapshot.
    *
-   * A stopgap until weeks are being synced and frozen. It shows real Jobber
-   * figures now, but nothing is saved, and a reload can legitimately give a
-   * different answer if anything changed in Jobber meanwhile — which is
-   * precisely what freezing exists to prevent, and why this is a button
-   * rather than the default.
+   * Automatic for any week without a stored snapshot: choosing a date should
+   * show that date's figures, not a button asking permission to go and get
+   * them. That is what a dashboard is.
+   *
+   * A stored week is never re-fetched. Once a week is frozen it must keep
+   * reading the same, or a figure Chase screenshotted in August quietly
+   * becomes a different figure in December.
+   *
+   * `?fetch=0` opts out, for when Jobber is down and the error is in the way.
    */
-  const wantsLive = params.fetch === "1" && kind === "weekly";
+  const wantsLive = kind === "weekly" && !hasFigures && params.fetch !== "0";
   let live: Awaited<ReturnType<typeof syncWeek>> | null = null;
   let liveError: string | null = null;
 
@@ -176,12 +180,10 @@ export default async function Dashboard({
                 body={
                   liveError
                     ? `Couldn’t reach Jobber: ${liveError}`
-                    : "Nothing stored for this week yet. Pull it straight from Jobber to see the real figures — nothing is saved, so a reload can differ."
+                    : "Nothing stored for this week, and no live figures came back."
                 }
                 action={
-                  <Button href={`/?week=${week.start}&fetch=1`}>
-                    {liveError ? "Try again" : "Fetch from Jobber"}
-                  </Button>
+                  <Button href={`/?week=${week.start}`}>Try again</Button>
                 }
               />
             ) : (
