@@ -190,8 +190,24 @@ export async function paginate<Node>(
 
 /* ------------------------------------------------------------------ helper */
 
+/**
+ * An environment variable, trimmed.
+ *
+ * The trim is not tidiness. Pasting a URL into a hosting dashboard very
+ * easily carries a trailing newline, and OAuth compares redirect URIs byte
+ * for byte: a stray 
+ fails with
+ *
+ *   The provided redirect URI "https://.../api/jobber/callback
+" isn't valid
+ *
+ * which is only diagnosable if you notice the escape sequence inside the
+ * quotes. The same paste into the client secret fails as `invalid_client`,
+ * which says nothing at all. Trimming here costs nothing and removes a whole
+ * category of confusing failure.
+ */
 function env(name: string): string {
-  const value = process.env[name];
+  const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is not set.`);
   return value;
 }
