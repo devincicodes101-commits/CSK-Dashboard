@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/*
+ * Light only, deliberately.
+ *
+ * The blocks on this dashboard exist to be screenshotted and pasted into
+ * emails and messages to people who never open the app. A dark screenshot
+ * dropped into a white email reads as a mistake, so there is one look and it
+ * is the one that travels.
+ */
+
+@theme {
+  --color-ground: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-surface-2: #eceff3;
+
+  --color-ink: #14171d;
+  --color-ink-2: #454c58;
+  --color-ink-3: #6e7684;
+
+  --color-line: #dbdfe6;
+  --color-line-strong: #c3c9d3;
+
+  --color-accent: #a9530f;
+  --color-accent-tint: #f6ece2;
+
+  --color-good: #1c6b48;
+  --color-good-tint: #e4f1ea;
+  --color-warn: #8a6206;
+  --color-warn-tint: #f7efdb;
+  --color-bad: #9c3226;
+  --color-bad-tint: #f9e7e3;
+
+  --font-sans:
+    ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Figures line up in columns wherever they are stacked. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
