@@ -21,7 +21,11 @@ export async function GET() {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 600,
+    // Thirty minutes. Ten was not enough: signing in to Jobber, picking the
+    // right account and reading the permissions screen can genuinely take
+    // longer, and running out turns into "could not be verified", which
+    // sounds like a security problem rather than a timeout.
+    maxAge: 1800,
   });
   return response;
 }

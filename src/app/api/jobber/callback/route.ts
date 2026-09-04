@@ -23,10 +23,22 @@ export async function GET(request: NextRequest) {
   const expected = request.cookies.get("jobber_oauth_state")?.value;
 
   if (!code) return fail(request, "Jobber did not return an authorisation code.");
-  if (!state || !expected || state !== expected) {
+
+  // Missing and mismatched mean different things, and conflating them sends
+  // people hunting for a security problem when they simply took too long.
+  if (!expected) {
     return fail(
       request,
-      "That connection attempt could not be verified. Start again from Settings.",
+      "That connection attempt expired, or its link had already been used. " +
+        "This is what happens on a browser refresh or back. Click Connect " +
+        "Jobber to start a fresh one.",
+    );
+  }
+  if (!state || state !== expected) {
+    return fail(
+      request,
+      "The value Jobber sent back did not match the one we issued, so the " +
+        "connection was refused. Start again from Settings.",
     );
   }
 
