@@ -2,6 +2,8 @@ import { Block, Correction, EmptyBlock, Metric, Metrics, Pill } from "@/componen
 import { PeriodNav } from "@/components/PeriodNav";
 import { SectionNav, type Section } from "@/components/SectionNav";
 import { computeWeek, count, money, percent } from "@/lib/week-metrics";
+import { syncWeek } from "@/lib/sync";
+import { Button } from "@/components/ui";
 import {
   type PeriodKind,
   monthOf,
@@ -47,7 +49,13 @@ const SYNCED_WEEKS = [VERIFIED_WEEK_MONDAY] as const;
 export default async function Dashboard({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string; month?: string; period?: string }>;
+  searchParams: Promise<{
+    week?: string;
+    month?: string;
+    period?: string;
+    /** "1" pulls the week live from Jobber instead of reading a snapshot. */
+    fetch?: string;
+  }>;
 }) {
   const params = await searchParams;
   const kind: PeriodKind = params.period === "monthly" ? "monthly" : "weekly";
@@ -56,7 +64,30 @@ export default async function Dashboard({
   const month = params.month ?? monthOf(week.start);
   const hasFigures = kind === "weekly" && SYNCED_WEEKS.includes(week.start as never);
 
-  const metrics = hasFigures
+  /**
+   * Pull the week live rather than reading a stored snapshot.
+   *
+   * A stopgap until weeks are being synced and frozen. It shows real Jobber
+   * figures now, but nothing is saved, and a reload can legitimately give a
+   * different answer if anything changed in Jobber meanwhile — which is
+   * precisely what freezing exists to prevent, and why this is a button
+   * rather than the default.
+   */
+  const wantsLive = params.fetch === "1" && kind === "weekly";
+  let live: Awaited<ReturnType<typeof syncWeek>> | null = null;
+  let liveError: string | null = null;
+
+  if (wantsLive) {
+    try {
+      live = await syncWeek(week);
+    } catch (e) {
+      liveError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  const metrics = live
+    ? live.metrics
+    : hasFigures
     ? computeWeek({
         week,
         quotes: VERIFIED_QUOTES,
@@ -109,11 +140,18 @@ export default async function Dashboard({
             syncedPeriods={SYNCED_WEEKS}
           />
 
-          {hasFigures ? (
+          {live ? (
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              {/* Live and stored must never look alike. A stored week is
+                  frozen and will read the same forever; this one is whatever
+                  Jobber says right now, and is not saved. */}
+              <Pill tone="accent">Live from Jobber &middot; not saved</Pill>
+              <p className="font-mono text-[11px] text-ink-4">
+                {`${live.counts.quotes} quotes, ${live.counts.jobs} jobs`}
+              </p>
+            </div>
+          ) : hasFigures ? (
             <div className="mt-6">
-              {/* The pill alone. The paragraph that explained it lived here and
-                  was cut: it said the same thing three times over, and the
-                  figures are what the page is for. */}
               <Pill tone="warn">Sample week</Pill>
             </div>
           ) : null}
@@ -132,12 +170,21 @@ export default async function Dashboard({
             title="Monthly isn’t built yet"
             body="Efficiency compares actual against quoted, and quoted hours were blank on seven of the eight jobs in the verified week. That is a gap in what CSK record, not something the dashboard can compute around. The revenue split is buildable once the job-type field is being filled in."
           />
-        ) : !metrics ? (
-          <NotBuilt
-            title={`No figures for ${weekLabelWithYear(week)}`}
-            body="This week hasn’t been synced. Once Jobber is connected the sync runs on Tuesday night, after Friday’s invoices and the week’s expenses have landed, and the week is then frozen so it always reads the same."
-          />
-        ) : (
+            ) : !metrics ? (
+              <NotBuilt
+                title={`No figures for ${weekLabelWithYear(week)}`}
+                body={
+                  liveError
+                    ? `Couldn’t reach Jobber: ${liveError}`
+                    : "Nothing stored for this week yet. Pull it straight from Jobber to see the real figures — nothing is saved, so a reload can differ."
+                }
+                action={
+                  <Button href={`/?week=${week.start}&fetch=1`}>
+                    {liveError ? "Try again" : "Fetch from Jobber"}
+                  </Button>
+                }
+              />
+            ) : (
           <div className="flex flex-col gap-4">
             {/* --------------------------------------------------- sales -- */}
             <Block
@@ -321,7 +368,15 @@ export default async function Dashboard({
 }
 
 /** Says what is missing and why, rather than showing an empty grid. */
-function NotBuilt({ title, body }: { title: string; body: string }) {
+function NotBuilt({
+  title,
+  body,
+  action,
+}: {
+  title: string;
+  body: string;
+  action?: React.ReactNode;
+}) {
   return (
     <section className="rounded-xl border border-dashed border-line-strong px-6 py-14 text-center">
       <h2 className="font-display text-lg font-semibold tracking-tight text-ink-2">
@@ -330,6 +385,7 @@ function NotBuilt({ title, body }: { title: string; body: string }) {
       <p className="mx-auto mt-3 max-w-lg font-mono text-[11px] leading-relaxed text-ink-3">
         {body}
       </p>
+      {action ? <div className="mt-6">{action}</div> : null}
     </section>
   );
 }
