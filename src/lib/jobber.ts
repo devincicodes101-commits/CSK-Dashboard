@@ -1,17 +1,9 @@
 /**
  * Talking to Jobber.
  *
- * ─────────────────────────────────────────────────────────────────────────
- *  BEFORE THE FIRST REAL CONNECTION, CHECK THE THREE CONSTANTS BELOW.
- *
- *  The OAuth shape here is ordinary authorisation-code flow and will be
- *  right. The exact endpoint paths, the API version header, and above all
- *  the GraphQL field names in ./jobber-queries.ts were written from prior
- *  knowledge rather than read off Jobber's current documentation. Confirm
- *  them in the Developer Center schema explorer, fix what differs, and
- *  delete this notice. Nothing downstream depends on the names — the
- *  mapping into our own Quote and Job types is all in one place.
- * ─────────────────────────────────────────────────────────────────────────
+ * Endpoints, the version header and the field names in ./jobber-queries.ts
+ * were all confirmed against Jobber's schema explorer on 5 September 2026,
+ * API version 2025-04-16.
  */
 
 import { serviceClient } from "./supabase";
@@ -23,8 +15,12 @@ export const JOBBER_GRAPHQL_URL = "https://api.getjobber.com/api/graphql";
 /**
  * Jobber pins breaking changes behind a dated version header. Set it once and
  * leave it: an unpinned client silently changes shape when they ship.
+ *
+ * Taken from the Headers pane of Jobber's own GraphiQL console on 5 Sep 2026,
+ * which is also where the exact header name came from — it is
+ * X-JOBBER-GRAPHQL-VERSION, not the run-together spelling.
  */
-export const JOBBER_API_VERSION = "2025-01-20";
+export const JOBBER_API_VERSION = "2025-04-16";
 
 /* ------------------------------------------------------------------- oauth */
 
@@ -150,7 +146,7 @@ export async function graphql<T>(
     headers: {
       Authorization: `Bearer ${await accessToken()}`,
       "Content-Type": "application/json",
-      "X-JOBBER-GRAPHQLVERSION": JOBBER_API_VERSION,
+      "X-JOBBER-GRAPHQL-VERSION": JOBBER_API_VERSION,
     },
     body: JSON.stringify({ query, variables }),
   });
