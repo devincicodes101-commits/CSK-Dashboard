@@ -220,12 +220,22 @@ export function count(value: number | null): string {
   return value === null ? "—" : String(value);
 }
 
+/**
+ * "Aug 3 – 9", or "Aug 31 – Sep 6" where the week straddles two months.
+ *
+ * Repeating the month on both ends reads as two separate dates rather than one
+ * span, and the span is the point.
+ */
 export function weekLabel(week: Week): string {
-  const format = (iso: string) =>
-    new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-CA", {
-      day: "numeric",
-      month: "short",
-      timeZone: "UTC",
-    });
-  return `${format(week.start)} – ${format(week.end)}`;
+  const at = (iso: string) => new Date(`${iso}T00:00:00Z`);
+  const month = (d: Date) =>
+    d.toLocaleDateString("en-CA", { month: "short", timeZone: "UTC" });
+  const day = (d: Date) => d.getUTCDate();
+
+  const start = at(week.start);
+  const end = at(week.end);
+
+  return month(start) === month(end)
+    ? `${month(start)} ${day(start)} – ${day(end)}`
+    : `${month(start)} ${day(start)} – ${month(end)} ${day(end)}`;
 }

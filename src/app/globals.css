@@ -1,53 +1,104 @@
 @import "tailwindcss";
 
 /*
- * Light only, deliberately.
+ * Warm dark, single theme.
  *
- * The blocks on this dashboard exist to be screenshotted and pasted into
- * emails and messages to people who never open the app. A dark screenshot
- * dropped into a white email reads as a mistake, so there is one look and it
- * is the one that travels.
+ * The ground is a brown-black rather than a blue-black, and every neutral is
+ * pulled a few degrees toward the bronze accent. That is the whole trick: a
+ * cold grey next to a warm accent reads as two unrelated systems, and the
+ * page stops looking designed.
+ *
+ * One look, not two. These blocks get screenshotted out of the app and pasted
+ * into messages, so what ships has to be what travels — a theme that changes
+ * under the reader would mean the same block arriving two different ways.
  */
 
 @theme {
-  --color-ground: #f6f7f9;
-  --color-surface: #ffffff;
-  --color-surface-2: #eceff3;
+  /* Ground climbs in warmth as it comes forward. */
+  --color-ground: #0b0907;
+  --color-surface: #141010;
+  --color-surface-2: #1b1614;
+  --color-raised: #221b17;
 
-  --color-ink: #14171d;
-  --color-ink-2: #454c58;
-  --color-ink-3: #6e7684;
+  --color-line: #2b2320;
+  --color-line-strong: #3d332c;
 
-  --color-line: #dbdfe6;
-  --color-line-strong: #c3c9d3;
+  /* Cream, not white. Pure white on a warm ground reads blue. */
+  --color-ink: #f5efe7;
+  --color-ink-2: #bcb0a3;
+  --color-ink-3: #877b6f;
+  --color-ink-4: #5f554d;
 
-  --color-accent: #a9530f;
-  --color-accent-tint: #f6ece2;
+  /* Bronze. The one saturated colour on the page. */
+  --color-accent: #d3934f;
+  --color-accent-soft: #8a5c2e;
+  --color-accent-tint: #2a1e13;
 
-  --color-good: #1c6b48;
-  --color-good-tint: #e4f1ea;
-  --color-warn: #8a6206;
-  --color-warn-tint: #f7efdb;
-  --color-bad: #9c3226;
-  --color-bad-tint: #f9e7e3;
+  /* Semantic, and deliberately desaturated so they sit beside the bronze
+     rather than fighting it. */
+  --color-good: #74bd97;
+  --color-good-tint: #14261d;
+  --color-warn: #d9ab5c;
+  --color-warn-tint: #262014;
+  --color-bad: #e08670;
+  --color-bad-tint: #2a1815;
 
-  --font-sans:
-    ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  /* Loaded by next/font in layout.tsx, which sets these two variables. */
+  --font-display: var(--font-archivo), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 
 html {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 body {
   background: var(--color-ground);
   color: var(--color-ink);
-  font-family: var(--font-sans);
+  font-family: var(--font-display);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Figures line up in columns wherever they are stacked. */
+/* Figures stack in columns across blocks, so they must not jitter. */
 .tnum {
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Tiny wide-tracked uppercase, the label style the whole layout hangs on. */
+.micro {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/*
+ * The one flourish: a low bronze horizon behind the masthead.
+ *
+ * Sits behind content at very low opacity and never moves. Anything more
+ * animated would be decoration competing with the numbers, which are the
+ * reason anyone opens this.
+ */
+.horizon {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 420px;
+  background:
+    radial-gradient(
+      120% 100% at 50% 0%,
+      color-mix(in oklab, var(--color-accent) 14%, transparent) 0%,
+      transparent 62%
+    );
+  pointer-events: none;
+  z-index: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }

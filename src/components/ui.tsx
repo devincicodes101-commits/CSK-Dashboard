@@ -3,31 +3,42 @@ import type { ReactNode } from "react";
 /**
  * A block is the unit of distribution, not just of layout.
  *
- * Chase screenshots one of these at a time and sends it on, so each carries
- * its own heading, its own audience, and enough context to make sense alone in
- * somebody's inbox. That is why the audience is printed on it rather than
- * living in a sidebar.
+ * Chase screenshots one of these and sends it on, so each has to survive
+ * alone in somebody's inbox: its own heading, its own audience, and the
+ * corrections that explain why its figures differ from Jobber's screen.
+ *
+ * Hence the border and the ordinal. The number is not decoration — the three
+ * blocks go out in that order, to those people, every Wednesday.
  */
 export function Block({
+  ordinal,
   title,
   audience,
   note,
   children,
 }: {
+  ordinal: string;
   title: string;
   audience: string;
   note?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-line bg-surface">
-      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line px-5 py-3.5">
-        <h2 className="text-sm font-semibold tracking-tight text-ink">{title}</h2>
-        <p className="text-xs text-ink-3">{audience}</p>
+    <section className="overflow-hidden rounded-xl border border-line bg-surface">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-b border-line px-6 py-4">
+        <div className="flex items-baseline gap-4">
+          <span className="micro text-accent">{ordinal}</span>
+          <h2 className="font-display text-[15px] font-semibold tracking-tight text-ink">
+            {title}
+          </h2>
+        </div>
+        <p className="micro text-ink-4">{audience}</p>
       </header>
-      <div className="px-5 py-4">{children}</div>
+
+      <div className="px-6 py-6">{children}</div>
+
       {note ? (
-        <footer className="border-t border-line bg-surface-2 px-5 py-3 text-xs leading-relaxed text-ink-2">
+        <footer className="flex flex-col gap-2 border-t border-line bg-surface-2 px-6 py-4">
           {note}
         </footer>
       ) : null}
@@ -35,10 +46,10 @@ export function Block({
   );
 }
 
-/** A row of figures. Two up on a phone, four up on a laptop. */
+/** Figures sit on one grid across every block so the eye can run down them. */
 export function Metrics({ children }: { children: ReactNode }) {
   return (
-    <dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
+    <dl className="grid grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-3 lg:grid-cols-4">
       {children}
     </dl>
   );
@@ -64,28 +75,33 @@ export function Metric({
   }[tone];
 
   return (
-    <div>
-      <dt className="text-xs font-medium text-ink-3">{label}</dt>
-      <dd className={`tnum mt-0.5 text-2xl font-semibold tracking-tight ${toneClass}`}>
+    <div className="flex flex-col gap-1.5">
+      <dt className="micro text-ink-3">{label}</dt>
+      <dd
+        className={`tnum font-display text-[26px] leading-none font-semibold tracking-[-0.02em] ${toneClass}`}
+      >
         {value}
       </dd>
-      {hint ? <p className="mt-0.5 text-xs text-ink-3">{hint}</p> : null}
+      {hint ? (
+        <p className="tnum font-mono text-[11px] leading-none text-ink-4">{hint}</p>
+      ) : null}
     </div>
   );
 }
 
 /**
- * States a figure Jobber's own screen shows, next to ours.
+ * States what Jobber's own screen says, next to what we report.
  *
- * Chase can open Jobber and see a different number from the one we hand him.
- * If we do not show our working he will reasonably conclude the dashboard is
- * broken, so the correction is printed rather than hidden.
+ * Chase can open Jobber and read a different number from the one we hand him.
+ * Without the working shown he will conclude the dashboard is broken, and be
+ * reasonable in doing so. So the correction ships attached to the block, not
+ * buried in documentation nobody opens.
  */
 export function Correction({ children }: { children: ReactNode }) {
   return (
-    <p className="flex gap-2 text-xs leading-relaxed text-ink-2">
-      <span aria-hidden className="mt-px select-none text-accent">
-        ‡
+    <p className="flex gap-2.5 font-mono text-[11px] leading-relaxed text-ink-2">
+      <span aria-hidden className="mt-px shrink-0 select-none text-accent">
+        &#8225;
       </span>
       <span>{children}</span>
     </p>
@@ -97,19 +113,18 @@ export function Pill({
   tone = "muted",
 }: {
   children: ReactNode;
-  tone?: "muted" | "good" | "warn" | "bad";
+  tone?: "muted" | "accent" | "good" | "warn" | "bad";
 }) {
   const toneClass = {
-    muted: "bg-surface-2 text-ink-2",
-    good: "bg-good-tint text-good",
-    warn: "bg-warn-tint text-warn",
-    bad: "bg-bad-tint text-bad",
+    muted: "border-line-strong text-ink-3",
+    accent: "border-accent-soft bg-accent-tint text-accent",
+    good: "border-good/40 bg-good-tint text-good",
+    warn: "border-warn/40 bg-warn-tint text-warn",
+    bad: "border-bad/40 bg-bad-tint text-bad",
   }[tone];
 
   return (
-    <span
-      className={`inline-block rounded px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${toneClass}`}
-    >
+    <span className={`micro inline-block rounded-full border px-2.5 py-1 ${toneClass}`}>
       {children}
     </span>
   );
@@ -117,8 +132,32 @@ export function Pill({
 
 export function EmptyBlock({ children }: { children: ReactNode }) {
   return (
-    <p className="rounded border border-dashed border-line-strong px-4 py-6 text-center text-sm text-ink-3">
+    <p className="rounded-lg border border-dashed border-line-strong px-5 py-8 text-center font-mono text-[11px] leading-relaxed text-ink-4">
       {children}
     </p>
+  );
+}
+
+/** Bronze on dark for the one real action; outlined for everything else. */
+export function Button({
+  href,
+  children,
+  variant = "primary",
+}: {
+  href: string;
+  children: ReactNode;
+  variant?: "primary" | "ghost";
+}) {
+  const base =
+    "inline-flex items-center rounded-full px-4 py-2 font-display text-[13px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  const look =
+    variant === "primary"
+      ? "bg-accent text-ground hover:bg-[#e0a463]"
+      : "border border-line-strong text-ink-2 hover:border-accent-soft hover:text-ink";
+
+  return (
+    <a href={href} className={`${base} ${look}`}>
+      {children}
+    </a>
   );
 }
