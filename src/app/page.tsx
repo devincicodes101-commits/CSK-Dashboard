@@ -110,12 +110,11 @@ export default async function Dashboard({
           />
 
           {hasFigures ? (
-            <div className="mt-6 flex flex-wrap items-center gap-3">
+            <div className="mt-6">
+              {/* The pill alone. The paragraph that explained it lived here and
+                  was cut: it said the same thing three times over, and the
+                  figures are what the page is for. */}
               <Pill tone="warn">Sample week</Pill>
-              <p className="max-w-xl font-mono text-[11px] leading-relaxed text-ink-3">
-                The one week checked line by line against CSK&rsquo;s own
-                numbers. Every figure below matches what Kyle produced by hand.
-              </p>
             </div>
           ) : null}
         </header>
