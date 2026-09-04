@@ -42,6 +42,7 @@ import {
   VERIFIED_QUOTES,
   VERIFIED_WEEK_MONDAY,
 } from "../src/lib/verified-week.ts";
+import { computeWeek } from "../src/lib/week-metrics.ts";
 
 /* ------------------------------------------------------------- test runner */
 
@@ -215,6 +216,68 @@ check(
     "hours",
   ).value,
   null,
+);
+
+
+
+/* ------------------------------------------------- the assembled dashboard */
+
+/**
+ * computeWeek, not just the rules underneath it.
+ *
+ * These exist because the first deploy rendered a 150% win rate. The rules
+ * were right and every check above passed; the assembly was wrong. It counted
+ * quotes sent from the fixture's three records — of which two fell inside the
+ * week — and divided three wins by two. Testing the parts is not the same as
+ * testing the thing that ships.
+ */
+section("The week as the dashboard assembles it");
+
+const assembled = computeWeek({
+  week: WEEK,
+  quotes: QUOTES,
+  jobs: JOBS,
+  quotesAreComplete: false,
+  cards: {
+    newLeads: VERIFIED_CARDS.newLeads,
+    newRequests: VERIFIED_CARDS.newRequests,
+    quotesSentCount: VERIFIED_CARDS.quotesSentCount,
+    quotesSentValue: VERIFIED_CARDS.quotesSentValue,
+    invoicedValue: VERIFIED_CARDS.invoicedValue,
+  },
+  quickBooks: { cashBalance: null, arTotal: null, arOver30: null, invoicesOver30: null },
+});
+
+check("quotes sent comes from the card, not the partial records", assembled.quotesSentCount, 7);
+close("and its value likewise", assembled.quotesSentValue, 206046, 0.005);
+check("won", assembled.wonCount, 3);
+close("win rate is 42.9%, not 150%", assembled.conversionRate, 0.428571, 0.0001);
+check("the collapsed quote is reported", assembled.collapsedQuotes.join(","), "1231");
+close("gross profit rate", assembled.grossProfitRate, 0.4928, 0.0001);
+check("QuickBooks absence is raised, not zeroed", assembled.cashBalance, null);
+check(
+  "and said out loud",
+  assembled.problems.some((p) => p.where === "Cash & AR"),
+  true,
+);
+
+section("An impossible win rate is refused, not printed");
+const impossible = computeWeek({
+  week: WEEK,
+  quotes: QUOTES,
+  jobs: JOBS,
+  quotesAreComplete: true, // pretend the partial set is the whole set
+  cards: {
+    newLeads: null, newRequests: null,
+    quotesSentCount: null, quotesSentValue: null, invoicedValue: null,
+  },
+  quickBooks: { cashBalance: null, arTotal: null, arOver30: null, invoicesOver30: null },
+});
+check("three won against two sent", `${impossible.wonCount}/${impossible.quotesSentCount}`, "3/2");
+check(
+  "raises an error rather than showing 150%",
+  impossible.problems.some((p) => p.where === "Win rate" && p.severity === "error"),
+  true,
 );
 
 /* --------------------------------------------------------------------- done */

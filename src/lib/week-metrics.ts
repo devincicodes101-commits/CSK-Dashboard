@@ -20,13 +20,30 @@ import {
   rate,
   sumJobs,
   sumSubtotals,
-} from "./metric-rules";
+  // Explicit .ts extension: scripts/test-metrics.mts imports this file through
+  // Node's ESM loader, which will not resolve an extensionless path.
+} from "./metric-rules.ts";
 import type { Problem } from "./types";
 
 export interface WeekSources {
   readonly week: Week;
   readonly quotes: readonly Quote[];
   readonly jobs: readonly Job[];
+  /**
+   * Whether `quotes` holds EVERY quote the week touched, or only the ones
+   * that were won.
+   *
+   * This has to be stated rather than guessed. A sync from the API returns
+   * the full set, so quotes sent can be counted from the records. The
+   * verified-week fixture holds only the three winning quotes, because the
+   * recording never listed the other four that were sent — counting those
+   * records gives 2 sent against 3 won, and a win rate of 150%.
+   *
+   * Inferring completeness from "did we find any?" is what produced exactly
+   * that on the first deploy. An incomplete set looks identical to a quiet
+   * week, so only the caller knows which it is.
+   */
+  readonly quotesAreComplete: boolean;
   /**
    * Figures Jobber exposes only as summary cards. Once the API is connected
    * most of these are derived instead; until then they are supplied.
@@ -81,7 +98,7 @@ export interface ComputedWeek {
 }
 
 export function computeWeek(sources: WeekSources): ComputedWeek {
-  const { week, quotes, jobs, cards, quickBooks } = sources;
+  const { week, quotes, jobs, cards, quickBooks, quotesAreComplete } = sources;
   const problems: Problem[] = [];
 
   /* ---- sales ---- */
@@ -90,22 +107,37 @@ export function computeWeek(sources: WeekSources): ComputedWeek {
   const converted = quotesConverted(quotes, week);
   const approved = quotesApproved(quotes, week);
 
-  // Prefer a count derived from records; fall back to the card only where we
-  // genuinely have no rows, and say so rather than quietly reporting either.
-  const derivedSent = quotesSent(quotes, week).length;
-  const sentCount = derivedSent > 0 ? derivedSent : cards.quotesSentCount;
-  if (derivedSent === 0 && cards.quotesSentCount !== null) {
+  // Count sent from the records only when the caller says we have all of
+  // them. Otherwise take Jobber's own figure, which is the only complete one
+  // available.
+  const sent = quotesSent(quotes, week);
+  const sentCount = quotesAreComplete ? sent.length : cards.quotesSentCount;
+  const sentValue = quotesAreComplete ? sumSubtotals(sent) : cards.quotesSentValue;
+
+  if (quotesAreComplete && sent.length === 0 && won.length > 0) {
     problems.push({
       where: "Quotes sent",
       message:
-        "Taken from Jobber's summary card because no sent quotes were found " +
-        "in the records for this week. Check the date filter.",
-      severity: "warning",
+        "Quotes were won this week but none were sent, which cannot be right. " +
+        "Check the date filter on the sync before trusting the win rate.",
+      severity: "error",
     });
   }
 
-  const sentValue =
-    derivedSent > 0 ? sumSubtotals(quotesSent(quotes, week)) : cards.quotesSentValue;
+  // A win rate above 100% is arithmetically possible here — a quote sent in
+  // one week can be won in the next — but it is far more often a sign that the
+  // two figures came from different populations. Say so rather than printing
+  // it as though it meant something.
+  if (sentCount !== null && won.length > sentCount) {
+    problems.push({
+      where: "Win rate",
+      message:
+        `${won.length} quotes were won against ${sentCount} sent, so the rate ` +
+        `is over 100%. That is usually a mismatch between where the two ` +
+        `figures came from, not a remarkable week.`,
+      severity: "error",
+    });
+  }
 
   /* ---- revenue and production ---- */
 

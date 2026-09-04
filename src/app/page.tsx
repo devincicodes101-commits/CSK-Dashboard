@@ -24,6 +24,9 @@ export default function WeeklyDashboard() {
     week,
     quotes: VERIFIED_QUOTES,
     jobs: VERIFIED_JOBS,
+    // The recording listed the three winning quotes but not the other four
+    // that were sent, so quotes sent comes from Jobber's card instead.
+    quotesAreComplete: false,
     cards: {
       newLeads: VERIFIED_CARDS.newLeads,
       newRequests: VERIFIED_CARDS.newRequests,
