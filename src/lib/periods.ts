@@ -49,7 +49,43 @@ export function lastCompletedWeek(now = new Date()): string {
   return shiftWeek(mondayOf(now), -1);
 }
 
-/** Recent Mondays, newest first, for the period list. */
+/**
+ * Every week of a year, newest first.
+ *
+ * The list used to be a rolling thirteen weeks counting backwards from
+ * whatever was selected, which meant moving to July put August off the end
+ * with no way back to it. A whole year is always reachable from anywhere in
+ * that year instead.
+ *
+ * `notAfter` stops the current year listing weeks that have not happened.
+ * Past years list in full.
+ *
+ * The first entry can start in the previous December: the week containing 1
+ * January usually does, and it belongs to this year's reporting more than to
+ * last year's.
+ */
+export function weeksOfYear(year: number, notAfter: string): string[] {
+  const weeks: string[] = [];
+  let monday = mondayOf(new Date(Date.UTC(year, 0, 1)));
+
+  // Guard rather than while(true): a date bug here would hang the render.
+  for (let i = 0; i < 54; i += 1) {
+    const sunday = iso(new Date(utc(monday).getTime() + 6 * DAY));
+    if (utc(sunday).getUTCFullYear() > year) break;
+    if (monday > notAfter) break;
+    weeks.push(monday);
+    monday = shiftWeek(monday, 1);
+  }
+
+  return weeks.reverse();
+}
+
+/** The year a week belongs to, taken from its Sunday. */
+export function yearOfWeek(monday: string): number {
+  return utc(iso(new Date(utc(monday).getTime() + 6 * DAY))).getUTCFullYear();
+}
+
+/** Recent Mondays, newest first. Kept for the sparkline-style short lists. */
 export function recentWeeks(count: number, from: string): string[] {
   return Array.from({ length: count }, (_, i) => shiftWeek(from, -i));
 }
@@ -59,6 +95,17 @@ export function recentWeeks(count: number, from: string): string[] {
 /** "2026-08". */
 export function monthOf(monday: string): string {
   return monday.slice(0, 7);
+}
+
+/** Every month of a year, newest first, not running past `notAfter`. */
+export function monthsOfYear(year: number, notAfter: string): string[] {
+  const months: string[] = [];
+  for (let m = 1; m <= 12; m += 1) {
+    const ym = `${year}-${String(m).padStart(2, "0")}`;
+    if (ym > notAfter) break;
+    months.push(ym);
+  }
+  return months.reverse();
 }
 
 export function recentMonths(count: number, from: string): string[] {

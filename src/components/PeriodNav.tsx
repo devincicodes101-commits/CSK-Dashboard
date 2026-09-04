@@ -1,26 +1,28 @@
 import { weekFromMonday } from "@/lib/metric-rules";
 import {
   type PeriodKind,
+  lastCompletedWeek,
   monthLabel,
-  recentMonths,
-  recentWeeks,
+  monthOf,
+  monthsOfYear,
   shiftMonth,
   shiftWeek,
   weekLabel,
   weekLabelWithYear,
+  weeksOfYear,
+  yearOfWeek,
 } from "@/lib/periods";
 
 /**
  * Moving between periods.
  *
  * Entirely links and one <details>, with no client JavaScript. Every control
- * is a real anchor, so it is keyboard reachable, opens in a new tab if someone
- * wants that, and works before hydration — which matters when the whole page
- * is server rendered from a stored snapshot anyway.
+ * is a real anchor, so it is keyboard reachable and works before hydration —
+ * which suits a page rendered from a stored snapshot.
  *
- * The <details> list is used rather than a <select> because a select needs JS
- * to navigate on change, and rather than a calendar grid because the choice is
- * "which of the last 13 weeks", not "which day of the year".
+ * The list holds a whole year, grouped by month, rather than a rolling window
+ * counting back from wherever you happen to be. A rolling window meant moving
+ * to July put August off the end with no way back to it.
  */
 
 function Chevron({ direction }: { direction: "left" | "right" }) {
@@ -44,6 +46,14 @@ function Chevron({ direction }: { direction: "left" | "right" }) {
 const STEP =
   "inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-line-strong text-ink-3 transition-colors duration-200 hover:border-accent-soft hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
+interface Option {
+  key: string;
+  href: string;
+  label: string;
+  /** Heading this option sits under, e.g. "August". */
+  group: string;
+}
+
 export function PeriodNav({
   kind,
   weekStart,
@@ -51,14 +61,13 @@ export function PeriodNav({
   syncedPeriods,
 }: {
   kind: PeriodKind;
-  /** Monday of the selected week. */
   weekStart: string;
-  /** "2026-08" — the selected month. */
   month: string;
-  /** Periods that actually have stored figures, so the list can say which. */
+  /** Periods with stored figures, so the list can show which. */
   syncedPeriods: readonly string[];
 }) {
   const isWeekly = kind === "weekly";
+  const year = isWeekly ? yearOfWeek(weekStart) : Number(month.slice(0, 4));
 
   const current = isWeekly
     ? weekLabelWithYear(weekFromMonday(weekStart))
@@ -71,21 +80,33 @@ export function PeriodNav({
     ? `/?week=${shiftWeek(weekStart, 1)}`
     : `/?period=monthly&month=${shiftMonth(month, 1)}`;
 
-  const options = isWeekly
-    ? recentWeeks(13, weekStart).map((monday) => ({
+  const selected = isWeekly ? weekStart : month;
+
+  const options: Option[] = isWeekly
+    ? weeksOfYear(year, lastCompletedWeek()).map((monday) => ({
+        key: monday,
         href: `/?week=${monday}`,
         label: weekLabel(weekFromMonday(monday)),
-        key: monday,
+        group: monthLabel(monthOf(monday)).replace(` ${year}`, ""),
       }))
-    : recentMonths(12, month).map((ym) => ({
-        href: `/?period=monthly&month=${ym}`,
-        label: monthLabel(ym),
+    : monthsOfYear(year, monthOf(new Date().toISOString().slice(0, 10))).map((ym) => ({
         key: ym,
+        href: `/?period=monthly&month=${ym}`,
+        label: monthLabel(ym).replace(` ${year}`, ""),
+        group: String(year),
       }));
+
+  // Group in place; the list is already newest first, so months come out in
+  // that order without sorting again.
+  const groups: { name: string; items: Option[] }[] = [];
+  for (const option of options) {
+    const last = groups[groups.length - 1];
+    if (last && last.name === option.group) last.items.push(option);
+    else groups.push({ name: option.group, items: [option] });
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-4">
-      {/* Weekly / Monthly */}
       <div
         role="group"
         aria-label="Reporting period"
@@ -99,7 +120,6 @@ export function PeriodNav({
         </TabLink>
       </div>
 
-      {/* ← current ▾ → */}
       <div className="flex items-center gap-2">
         <a href={previous} className={STEP} aria-label="Previous period" rel="nofollow">
           <Chevron direction="left" />
@@ -113,30 +133,43 @@ export function PeriodNav({
             </svg>
           </summary>
 
-          <ul className="absolute left-0 top-11 z-30 max-h-80 w-60 overflow-y-auto rounded-xl border border-line bg-raised py-1.5 shadow-2xl shadow-black/50">
-            {options.map((option) => {
-              const synced = syncedPeriods.includes(option.key);
-              return (
-                <li key={option.key}>
-                  <a
-                    href={option.href}
-                    className="micro flex cursor-pointer items-center justify-between gap-3 px-4 py-2.5 text-ink-2 transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:bg-surface-2 focus-visible:text-ink focus-visible:outline-none"
-                  >
-                    {option.label}
-                    {synced ? (
-                      <span className="text-good" aria-label="has figures">
-                        &#9679;
-                      </span>
-                    ) : (
-                      <span className="text-ink-4" aria-label="not synced">
-                        &#9675;
-                      </span>
-                    )}
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="absolute left-0 top-11 z-30 max-h-[26rem] w-64 overflow-y-auto rounded-xl border border-line bg-raised py-1 shadow-2xl shadow-black/60">
+            <p className="micro sticky top-0 z-10 bg-raised px-4 py-2.5 text-accent">
+              {year}
+            </p>
+
+            {groups.map((group) => (
+              <div key={group.name}>
+                <p className="micro px-4 py-2 text-ink-4">{group.name}</p>
+                <ul>
+                  {group.items.map((option) => {
+                    const isSelected = option.key === selected;
+                    const synced = syncedPeriods.includes(option.key);
+                    return (
+                      <li key={option.key}>
+                        <a
+                          href={option.href}
+                          aria-current={isSelected ? "page" : undefined}
+                          className={`micro flex cursor-pointer items-center justify-between gap-3 py-2 pl-6 pr-4 transition-colors duration-150 focus-visible:outline-none ${
+                            isSelected
+                              ? "bg-accent-tint text-accent"
+                              : "text-ink-2 hover:bg-surface-2 hover:text-ink focus-visible:bg-surface-2 focus-visible:text-ink"
+                          }`}
+                        >
+                          {option.label}
+                          {synced ? (
+                            <span className="text-good" title="has figures">
+                              &#9679;
+                            </span>
+                          ) : null}
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
         </details>
 
         <a href={next} className={STEP} aria-label="Next period" rel="nofollow">
@@ -161,9 +194,7 @@ function TabLink({
       href={href}
       aria-current={active ? "page" : undefined}
       className={`micro cursor-pointer rounded-full px-4 py-2 transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-        active
-          ? "bg-accent-tint text-accent"
-          : "text-ink-3 hover:text-ink"
+        active ? "bg-accent-tint text-accent" : "text-ink-3 hover:text-ink"
       }`}
     >
       {children}
