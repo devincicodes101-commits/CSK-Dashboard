@@ -27,12 +27,43 @@ export default async function Settings({
 
   const warning = backendWarning();
 
+  /**
+   * Just connected, but this instance is not holding the token.
+   *
+   * The callback runs on one serverless instance and the redirect lands on
+   * another, so with the in-memory store the page can truthfully say both
+   * "connected" and "not connected" at once. Showing a bare NOT CONNECTED
+   * next to a success banner reads as a failure, and it is not one — the
+   * token exists, just somewhere else.
+   */
+  const connectedElsewhere = Boolean(connected) && !jobber && backend() === "memory";
+
   return (
     <div className="relative min-h-screen">
       <div className="horizon" aria-hidden />
 
       <main className="relative z-10 mx-auto max-w-3xl px-5 pb-24 pt-12 sm:px-8 sm:pt-16">
         <header className="mb-8">
+          <a
+            href="/"
+            className="micro mb-6 inline-flex cursor-pointer items-center gap-2 text-ink-3 transition-colors duration-200 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              width="12"
+              height="12"
+              aria-hidden
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M10 3 L5 8 L10 13" />
+            </svg>
+            Dashboard
+          </a>
+
           <div className="mb-5 flex flex-wrap items-baseline justify-between gap-4">
             <div>
               <p className="micro mb-3 text-accent">CSK Electric</p>
@@ -40,12 +71,6 @@ export default async function Settings({
                 Connections
               </h1>
             </div>
-            <a
-              href="/"
-              className="micro cursor-pointer text-ink-3 transition-colors duration-200 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
-              Dashboard
-            </a>
           </div>
 
           <p className="max-w-xl font-mono text-[11px] leading-relaxed text-ink-3">
@@ -90,7 +115,17 @@ export default async function Settings({
             }
           >
             <div className="flex flex-wrap items-center gap-4">
-              {jobber ? (
+              {connectedElsewhere ? (
+                <>
+                  <Pill tone="warn">Connected, not held here</Pill>
+                  <p className="max-w-md font-mono text-[11px] leading-relaxed text-ink-3">
+                    The connection succeeded. This page was served by a
+                    different server instance from the one that stored the
+                    token, so it cannot see it. Reloading may or may not find
+                    it — that is what a database fixes.
+                  </p>
+                </>
+              ) : jobber ? (
                 <>
                   <Pill tone="good">Connected</Pill>
                   {jobber.connectedAccount ? (
