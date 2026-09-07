@@ -40,7 +40,7 @@ import { saveWeek } from "./week-store.ts";
  * Raise it for anything that changes the numbers: a definition, a query, a
  * date boundary. Not for wording or layout.
  */
-export const SYNC_VERSION = 3;
+export const SYNC_VERSION = 4;
 
 export interface SyncResult {
   metrics: ComputedWeek;
@@ -143,6 +143,7 @@ export async function syncWeek(week: {
   // matters while the cross-week counting rule is still unconfirmed.
   await saveWeek(result, {
     syncVersion: SYNC_VERSION,
+    wonEarlierToo: result.wonEarlierToo,
     quotes,
     jobs: jobs.map((m) => m.job),
   });

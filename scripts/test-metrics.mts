@@ -35,6 +35,7 @@ import {
   sumJobs,
   sumSubtotals,
   weekFromMonday,
+  alsoWonEarlier,
 } from "../src/lib/metric-rules.ts";
 import {
   VERIFIED_CARDS,
@@ -157,12 +158,46 @@ const CROSS: Quote[] = [
     sentAt: "2026-08-03",
   },
 ];
+// CSK's definition counts it in both weeks: approved in one, converted in the
+// other, and their spec says each week counts what happened in it. We follow
+// the definition and report the overlap rather than quietly picking one week,
+// because choosing is theirs to do and the choice changes monthly totals.
 check("counts in the week it was approved", quotesWon(CROSS, WEEK).length, 1);
 check(
-  "and not again when the job starts",
+  "and again in the week it converted, per CSK's definition",
   quotesWon(CROSS, weekFromMonday("2026-08-24")).length,
+  1,
+);
+check(
+  "the second week reports it as already won earlier",
+  alsoWonEarlier(CROSS, weekFromMonday("2026-08-24")).join(","),
+  "9001",
+);
+check(
+  "the first week reports nothing earlier",
+  alsoWonEarlier(CROSS, WEEK).length,
   0,
 );
+
+// The case this project exists for: converted keeps Jobber's own count, and
+// the deduplication comes out of approved instead.
+section("A quote approved in an earlier week and converted in this one");
+const CARRIED: Quote[] = [
+  {
+    quoteNumber: "1191",
+    clientName: "Test",
+    title: "Approved before the week, converted inside it",
+    subtotal: 5000,
+    total: 5250,
+    approvedAt: "2026-08-10",
+    convertedAt: "2026-08-20",
+    sentAt: "2026-08-03",
+  },
+];
+const AUG17 = weekFromMonday("2026-08-17");
+check("counts as converted, matching Jobber's screen", quotesConverted(CARRIED, AUG17).length, 1);
+check("and is not double counted as approved", quotesApproved(CARRIED, AUG17).length, 0);
+check("won once", quotesWon(CARRIED, AUG17).length, 1);
 
 /* ------------------------------------------------------- revenue and profit */
 

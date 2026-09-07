@@ -9,6 +9,7 @@ import {
   type Job,
   type Quote,
   type Week,
+  alsoWonEarlier,
   collapsedInWeek,
   conversionRate,
   grossProfit,
@@ -78,6 +79,12 @@ export interface ComputedWeek {
   readonly wonValue: number;
   readonly conversionRate: number | null;
   readonly collapsedQuotes: readonly string[];
+  /**
+   * Won here, and also won in an earlier week. CSK's definition counts a
+   * quote in the week it was approved and again in the week it converted, so
+   * weeks added together can exceed the number of quotes involved.
+   */
+  readonly wonEarlierToo: readonly string[];
 
   readonly invoicedValue: number | null;
   readonly revenueClosed: number;
@@ -179,6 +186,7 @@ export function computeWeek(sources: WeekSources): ComputedWeek {
     wonValue: sumSubtotals(won),
     conversionRate: sentCount === null ? null : conversionRate(won.length, sentCount),
     collapsedQuotes: collapsedInWeek(quotes, week),
+    wonEarlierToo: alsoWonEarlier(quotes, week),
 
     invoicedValue: cards.invoicedValue,
     revenueClosed: totals.revenue,

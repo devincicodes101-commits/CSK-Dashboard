@@ -275,6 +275,13 @@ export default async function Dashboard({
                       week and nowhere else. Quoting "29%" and "$3,675" on
                       January's week said something simply untrue about
                       January. Generic wording everywhere else. */}
+                  {metrics.wonEarlierToo.length > 0 ? (
+                    <Correction>
+                      {`Quote #${metrics.wonEarlierToo.join(", #")} was already counted as won in an earlier week — approved then, converted now. Each week counts what happened in it, so adding weeks together counts ${
+                        metrics.wonEarlierToo.length === 1 ? "it" : "them"
+                      } twice.`}
+                    </Correction>
+                  ) : null}
                   <Correction>
                     {isSample
                       ? `Jobber’s own screen reads ${percent(

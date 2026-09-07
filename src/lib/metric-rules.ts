@@ -157,38 +157,45 @@ export function firstWonAt(quote: Quote): string | null {
   return dates.reduce((a, b) => (a <= b ? a : b));
 }
 
-/** Quotes first won during the week. Each quote appears at most once. */
-export function quotesWon(
-  quotes: readonly Quote[],
-  week: Week,
-): readonly Quote[] {
+/** Deduplicate by quote number, keeping first appearance. */
+function unique(quotes: readonly Quote[]): Quote[] {
   const seen = new Set<string>();
-  const won: Quote[] = [];
+  const out: Quote[] = [];
   for (const quote of quotes) {
-    if (!within(firstWonAt(quote), week)) continue;
     if (seen.has(quote.quoteNumber)) continue;
     seen.add(quote.quoteNumber);
-    won.push(quote);
+    out.push(quote);
   }
-  return won;
+  return out;
 }
 
 /**
- * Of the quotes won this week, those that became a new job this week.
+ * Quotes that became a new job during the week.
  *
- * CSK show Converted and Approved as separate lines, and expect them to add up
- * to the total won. So Approved is defined as the remainder rather than
- * counted on its own — that way the two lines can never disagree with the
- * total, whatever the underlying data does.
+ * CSK's definition, verbatim: "Quotes report, dropdown 'Converted', within the
+ * week." Every quote whose convertedAt falls in the week, full stop.
+ *
+ * This was previously narrowed to quotes whose FIRST win also fell in the
+ * week, which quietly excluded any quote approved earlier and converted now.
+ * For 17-23 August that reported 2 where Jobber showed 3 — a rule we invented
+ * overriding a definition the client had written down.
  */
 export function quotesConverted(
   quotes: readonly Quote[],
   week: Week,
 ): readonly Quote[] {
-  return quotesWon(quotes, week).filter((q) => within(q.convertedAt, week));
+  return unique(quotes.filter((q) => within(q.convertedAt, week)));
 }
 
-/** Won this week without also converting this week: the change orders. */
+/**
+ * Approved during the week, excluding anything already counted as converted.
+ *
+ * This is where the deduplication lives, and it is where Kyle does it by hand:
+ * quote #1231 was approved on the Tuesday and converted on the Thursday, so it
+ * appears on both of Jobber's lists and must be counted once. Taking it out of
+ * Approved rather than Converted keeps Converted matching Jobber's own screen,
+ * which is what anyone checking will look at.
+ */
 export function quotesApproved(
   quotes: readonly Quote[],
   week: Week,
@@ -196,13 +203,47 @@ export function quotesApproved(
   const converted = new Set(
     quotesConverted(quotes, week).map((q) => q.quoteNumber),
   );
-  return quotesWon(quotes, week).filter((q) => !converted.has(q.quoteNumber));
+  return unique(
+    quotes.filter((q) => within(q.approvedAt, week) && !converted.has(q.quoteNumber)),
+  );
+}
+
+/** Converted plus approved, deduped by quote number. CSK's Total Quotes Won. */
+export function quotesWon(
+  quotes: readonly Quote[],
+  week: Week,
+): readonly Quote[] {
+  return [...quotesConverted(quotes, week), ...quotesApproved(quotes, week)];
 }
 
 /**
- * Quote numbers that were both approved and converted inside the week.
+ * Quotes counted as won here that were ALSO won in an earlier week.
  *
- * Shown on the dashboard under the win rate. Chase is being handed a number
+ * The open question, made visible instead of silently decided. A quote
+ * approved in March and converted in August is won twice under CSK's stated
+ * definition — once in each week — so the two weeks added together count it
+ * twice. Weekly figures are unaffected; monthly and yearly totals are not.
+ *
+ * We previously "solved" this by counting only the first win, which had the
+ * side effect of contradicting their Converted definition. Reporting it is
+ * honest; deciding it is CSK's to do.
+ */
+export function alsoWonEarlier(
+  quotes: readonly Quote[],
+  week: Week,
+): readonly string[] {
+  return quotesWon(quotes, week)
+    .filter((q) => {
+      const first = firstWonAt(q);
+      return first !== null && localDate(first) < week.start;
+    })
+    .map((q) => q.quoteNumber);
+}
+
+/**
+ * Quote numbers approved AND converted inside the same week.
+ *
+ * Shown on the dashboard under the win rate. Chase is being given a number
  * that will not match what he sees if he opens Jobber himself, so the
  * correction has to be visible or he will reasonably assume we are wrong.
  */
@@ -210,7 +251,7 @@ export function collapsedInWeek(
   quotes: readonly Quote[],
   week: Week,
 ): readonly string[] {
-  return quotesWon(quotes, week)
+  return unique(quotes)
     .filter((q) => within(q.approvedAt, week) && within(q.convertedAt, week))
     .map((q) => q.quoteNumber);
 }

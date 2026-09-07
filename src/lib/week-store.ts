@@ -84,6 +84,8 @@ export async function loadWeek(weekStart: string): Promise<StoredWeek | null> {
       wonValue: n(data.won_value),
       conversionRate: maybe(data.conversion_rate),
       collapsedQuotes: (data.collapsed_quotes as string[]) ?? [],
+      // Not its own column; lives in raw so no migration is needed.
+      wonEarlierToo: ((data.raw as { wonEarlierToo?: string[] })?.wonEarlierToo) ?? [],
 
       invoicedValue: maybe(data.invoiced_value),
       revenueClosed: n(data.revenue_closed),
