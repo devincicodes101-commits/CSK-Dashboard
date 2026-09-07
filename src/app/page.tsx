@@ -81,28 +81,26 @@ export default async function Dashboard({
    * week, which is the problem.
    */
   const isStale = Boolean(found && found.syncVersion < SYNC_VERSION);
-  const resyncing = params.resync === "1";
-  const stored = resyncing ? null : found;
-
   const isSample =
-    !stored && kind === "weekly" && week.start === VERIFIED_WEEK_MONDAY;
-  const hasFigures = isSample;
+    !found && kind === "weekly" && week.start === VERIFIED_WEEK_MONDAY;
 
   /**
-   * Pull the week live rather than reading a stored snapshot.
+   * Fetch when there is nothing stored, or when what is stored is stale.
    *
-   * Automatic for any week without a stored snapshot: choosing a date should
-   * show that date's figures, not a button asking permission to go and get
-   * them. That is what a dashboard is.
+   * Stale weeks heal themselves rather than waiting to be clicked. It costs
+   * one fetch per affected week, once — after which the week is stamped
+   * current and never queried again, which is what keeps this clear of
+   * Jobber's throttle.
    *
-   * A stored week is never re-fetched. Once a week is frozen it must keep
-   * reading the same, or a figure Chase screenshotted in August quietly
-   * becomes a different figure in December.
-   *
-   * `?fetch=0` opts out, for when Jobber is down and the error is in the way.
+   * `?fetch=0` still opts out, for when Jobber is down and the error is in
+   * the way of reading the older figures.
    */
   const wantsLive =
-    kind === "weekly" && !stored && !isSample && params.fetch !== "0";
+    kind === "weekly" &&
+    !isSample &&
+    params.fetch !== "0" &&
+    (!found || isStale || params.resync === "1");
+
   let live: Awaited<ReturnType<typeof syncWeek>> | null = null;
   let liveError: string | null = null;
 
@@ -122,11 +120,18 @@ export default async function Dashboard({
     }
   }
 
-  const metrics = stored
-    ? stored.metrics
-    : live
+  // Fresh wins. Otherwise fall back to whatever was stored — including a
+  // stale week — because older figures beat an error page when Jobber is
+  // unreachable. Say which is being shown, though; never let stale pass for
+  // current.
+  const stored = live ? null : found;
+  const servingStale = Boolean(!live && isStale);
+
+  const metrics = live
     ? live.metrics
-    : hasFigures
+    : found
+    ? found.metrics
+    : isSample
     ? computeWeek({
         week,
         quotes: VERIFIED_QUOTES,
@@ -181,8 +186,8 @@ export default async function Dashboard({
 
           {stored ? (
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              <Pill tone={isStale ? "warn" : "good"}>
-                {isStale ? "Stored · out of date" : "Stored"}
+              <Pill tone={servingStale ? "warn" : "good"}>
+                {servingStale ? "Older figures" : "Stored"}
               </Pill>
               <p className="font-mono text-[11px] text-ink-4">
                 {`fetched ${new Date(stored.syncedAt).toLocaleDateString("en-CA", {
@@ -191,12 +196,12 @@ export default async function Dashboard({
                   year: "numeric",
                 })}`}
               </p>
-              {isStale ? (
+              {servingStale ? (
                 <a
                   href={`/?week=${week.start}&resync=1`}
                   className="micro cursor-pointer rounded-full border border-accent-soft px-3 py-1.5 text-accent transition-colors duration-200 hover:bg-accent-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 >
-                  Re-fetch
+                  Try again
                 </a>
               ) : null}
             </div>
@@ -214,7 +219,7 @@ export default async function Dashboard({
                 {`${live.counts.jobs} jobs closed · ${live.counts.requests} requests · ${live.counts.quotes} quotes scanned`}
               </p>
             </div>
-          ) : hasFigures ? (
+          ) : isSample ? (
             <div className="mt-6">
               <Pill tone="warn">Sample week</Pill>
             </div>
@@ -389,11 +394,11 @@ export default async function Dashboard({
           </div>
         )}
 
-        {stored && isStale ? (
+        {servingStale ? (
           <p className="mt-6 rounded-lg border border-warn/40 bg-warn-tint px-5 py-4 font-mono text-[11px] leading-relaxed text-warn">
-            This week was fetched before some of its figures could be
-            calculated, and before week boundaries were corrected to CSK&rsquo;s
-            timezone. Re-fetch it to fill the gaps and fix the edges.
+            {`These figures were computed before some metrics could be fetched, and before week boundaries were corrected to CSK's timezone. Refreshing them just now didn't work${
+              liveError ? `: ${liveError}` : ""
+            }. Showing the older ones rather than nothing.`}
           </p>
         ) : null}
 
