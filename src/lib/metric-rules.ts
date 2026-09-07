@@ -39,6 +39,7 @@
  */
 
 import type { Problem } from "./types";
+import { localDate } from "./timezone.ts";
 
 /* ------------------------------------------------------------------ inputs */
 
@@ -107,10 +108,16 @@ export function weekFromMonday(mondayIso: string): Week {
   return { start: mondayIso, end: sunday.toISOString().slice(0, 10) };
 }
 
-/** Inclusive of both ends. Dates are compared as dates, never as instants. */
+/**
+ * Inclusive of both ends, compared as dates in CSK's own timezone.
+ *
+ * Slicing the first ten characters off a UTC timestamp is the obvious
+ * implementation and it is wrong: 2026-08-17T02:00:00Z is Sunday evening in
+ * Surrey and belongs to the week before. See ./timezone.ts.
+ */
 export function within(date: string | null, week: Week): boolean {
   if (!date) return false;
-  const day = date.slice(0, 10);
+  const day = localDate(date);
   return day >= week.start && day <= week.end;
 }
 

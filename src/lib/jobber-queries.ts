@@ -14,6 +14,7 @@
 
 import { type Job, type Quote, round2 } from "./metric-rules.ts";
 import { graphql, paginate } from "./jobber.ts";
+import { zonedInstant } from "./timezone.ts";
 
 /* ------------------------------------------------------------------ quotes */
 
@@ -197,11 +198,16 @@ export function toJob(raw: RawJob): MappedJob {
 
 /* ------------------------------------------------------------- the fetches */
 
-/** ISO8601 bounds for a Monday-to-Sunday week, inclusive of both days. */
+/**
+ * ISO8601 bounds for a Monday-to-Sunday week, in CSK's timezone.
+ *
+ * Not `${weekStart}T00:00:00Z`. That is 5pm the previous afternoon in Surrey,
+ * so it drops Sunday evening's records and picks up the Sunday evening before.
+ */
 export function weekBounds(weekStart: string, weekEnd: string) {
   return {
-    from: `${weekStart}T00:00:00Z`,
-    to: `${weekEnd}T23:59:59Z`,
+    from: zonedInstant(weekStart, "start"),
+    to: zonedInstant(weekEnd, "end"),
   };
 }
 
@@ -226,7 +232,7 @@ export async function fetchQuotesSent(
 export async function fetchQuotesPossiblyWon(weekStart: string): Promise<Quote[]> {
   const nodes = await paginate<RawQuote>(
     QUOTES_TRANSITIONED,
-    { since: `${weekStart}T00:00:00Z` },
+    { since: zonedInstant(weekStart, "start") },
     (d) =>
       (d as { quotes: { nodes: RawQuote[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } }).quotes,
   );
@@ -348,4 +354,41 @@ export async function fetchInvoicedValue(
     value: round2(nodes.reduce((sum, i) => sum + (i.amounts?.subtotal ?? 0), 0)),
     count: nodes.length,
   };
+}
+
+/* ----------------------------------------------------------------- clients */
+
+/**
+ * Clients created inside the week — the candidate for "New leads".
+ *
+ * Jobber's API has no leads query, but its Insights screen shows a New leads
+ * figure, and ClientFilterAttributes carries an `isLead` flag — so a lead is
+ * a client record, not a separate object.
+ *
+ * `isLead` is deliberately NOT filtered on. It describes the client's status
+ * now, not when they were created: a lead who became a customer last week
+ * would vanish from the week they arrived in, and the figure for a past week
+ * would quietly shrink over time. Counting clients created is stable.
+ *
+ * Uses totalCount rather than paging the nodes. Same answer, a fraction of
+ * the query cost, and Jobber throttles.
+ */
+export const CLIENTS_CREATED = `
+  query ClientsCreated($from: ISO8601DateTime!, $to: ISO8601DateTime!) {
+    clients(filter: { createdAt: { after: $from, before: $to } }, first: 1) {
+      totalCount
+    }
+  }
+`;
+
+export async function fetchNewClients(
+  weekStart: string,
+  weekEnd: string,
+): Promise<number> {
+  const { from, to } = weekBounds(weekStart, weekEnd);
+  const data = await graphql<{ clients: { totalCount: number } }>(CLIENTS_CREATED, {
+    from,
+    to,
+  });
+  return data.clients.totalCount;
 }

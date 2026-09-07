@@ -14,6 +14,7 @@
 import { type Quote } from "./metric-rules.ts";
 import {
   fetchInvoicedValue,
+  fetchNewClients,
   fetchJobsCompleted,
   fetchQuotesPossiblyWon,
   fetchQuotesSent,
@@ -39,11 +40,12 @@ export async function syncWeek(week: {
   // Two queries, because Jobber will filter on sentAt but not on the dates a
   // quote was actually won. See QUOTES_TRANSITIONED for why the second one has
   // no upper bound.
-  const [sent, possiblyWon, jobs, requests] = await Promise.all([
+  const [sent, possiblyWon, jobs, requests, newClients] = await Promise.all([
     fetchQuotesSent(week.start, week.end),
     fetchQuotesPossiblyWon(week.start),
     fetchJobsCompleted(week.start, week.end),
     fetchRequestsCreated(week.start, week.end),
+    fetchNewClients(week.start, week.end),
   ]);
 
   // Invoices separately, and allowed to fail. InvoiceAmounts' field names are
@@ -90,10 +92,10 @@ export async function syncWeek(week: {
     // in the week rather than a partial set.
     quotesAreComplete: true,
     cards: {
-      // Jobber has no `leads` query at all, and its Insights screen shows New
-      // leads and New requests as different numbers (12 and 22 in the verified
-      // week). Reporting requests as leads would be a guess dressed as a fact.
-      newLeads: null,
+      // Jobber has no leads query, but its filter has an isLead flag, so a
+      // lead is a client record. Clients created in the week is the closest
+      // stable equivalent — see fetchNewClients for why isLead is not used.
+      newLeads: newClients,
       newRequests: requests.length,
       // Derived from the records; see quotesAreComplete above.
       quotesSentCount: null,
@@ -111,9 +113,9 @@ export async function syncWeek(week: {
   problems.push({
     where: "New leads",
     message:
-      "Jobber's API has no leads query, and its Insights screen counts leads " +
-      "and requests differently. Requests are shown instead until CSK confirm " +
-      "which of the two they mean.",
+      "Counted as clients created in the week. Jobber's API exposes no leads " +
+      "query, so this is the closest equivalent to the figure on its Insights " +
+      "screen rather than the same figure. Worth confirming with Kyle.",
     severity: "warning",
   });
 
