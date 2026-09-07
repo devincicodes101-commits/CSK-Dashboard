@@ -196,6 +196,14 @@ export default async function Dashboard({
                   year: "numeric",
                 })}`}
               </p>
+              {servingStale && liveError ? (
+                <p className="max-w-md font-mono text-[11px] leading-relaxed text-warn">
+                  {/* Was only in a banner below the blocks, where someone
+                      reading the figures never sees it and concludes the
+                      numbers simply did not update. */}
+                  {`Refresh failed: ${liveError}`}
+                </p>
+              ) : null}
               {servingStale ? (
                 <a
                   href={`/?week=${week.start}&resync=1`}
@@ -300,40 +308,33 @@ export default async function Dashboard({
                 </>
               }
             >
-              {/* Seven metrics, matching the Definitions tab — the client's
-                  own dictionary, which pairs the count and the dollar value
-                  into one row: "Quotes Converted (#/$)". The Weekly tab splits
-                  them across ten rows so Kyle has a cell to type each into;
-                  that is a data-entry layout, not the metric list.
+              {/* The Weekly tab's rows, one tile each.
+                  
+                  The Definitions tab pairs these — "Quotes Converted (#/$)" —
+                  and building from it collapsed ten rows into seven. But the
+                  Weekly tab is the sheet Kyle actually fills in and walked
+                  through on the call, and its rows are what Chase reads. So
+                  this follows Weekly, and the counts and dollars stand alone.
 
-                  Names are verbatim, including the American "Labor" and the
-                  lower-case w in "Quotes Won $". Chase reads this beside a
-                  spreadsheet he has used for years, and a tidier wording only
-                  makes him stop to check whether it means the same thing. */}
+                  Names verbatim, including the American "Labor" and the
+                  lower-case w in "Total Quotes won ($)". Chase reads this
+                  beside a spreadsheet he has used for years; a tidier wording
+                  only makes him stop to check whether it means the same. */}
               <Metrics>
                 <Metric label="New Leads" value={count(metrics.newLeads)} />
                 <Metric label="Quotes Sent" value={count(metrics.quotesSentCount)} />
-                <Metric
-                  label="Quotes Converted (#/$)"
-                  value={count(metrics.convertedCount)}
-                  hint={money(metrics.convertedValue)}
-                />
-                <Metric
-                  label="Quotes Approved (#/$)"
-                  value={count(metrics.approvedCount)}
-                  hint={money(metrics.approvedValue)}
-                />
+                <Metric label="Quotes Converted (#)" value={count(metrics.convertedCount)} />
+                <Metric label="Quotes Approved (#)" value={count(metrics.approvedCount)} />
                 <Metric label="Total Quotes Won (#)" value={count(metrics.wonCount)} />
                 <Metric
                   label="Quote Conversion %"
                   value={percent(metrics.conversionRate)}
                   tone="good"
                 />
-                <Metric
-                  label="Quotes Won $ (+ Sent $)"
-                  value={money(metrics.wonValue)}
-                  hint={`${money(metrics.quotesSentValue)} sent`}
-                />
+                <Metric label="Quotes Converted ($)" value={money(metrics.convertedValue)} />
+                <Metric label="Quotes Approved ($)" value={money(metrics.approvedValue)} />
+                <Metric label="Total Quotes won ($)" value={money(metrics.wonValue)} />
+                <Metric label="Quotes Sent ($)" value={money(metrics.quotesSentValue)} />
               </Metrics>
             </Block>
 
@@ -366,10 +367,7 @@ export default async function Dashboard({
               }
             >
               <Metrics>
-                <Metric
-                  label="Revenue — Invoiced ($)"
-                  value={money(metrics.invoicedValue)}
-                />
+                <Metric label="Revenue — Invoiced ($)" value={money(metrics.invoicedValue)} />
                 <Metric
                   label="Revenue — Jobs Closed ($)"
                   value={money(metrics.revenueClosed)}
@@ -377,10 +375,10 @@ export default async function Dashboard({
                 />
                 <Metric label="Labor Cost ($)" value={money(metrics.labourCost)} />
                 <Metric label="Material Cost ($)" value={money(metrics.materialCost)} />
+                <Metric label="Gross Profit ($)" value={money(metrics.grossProfit)} />
                 <Metric
-                  label="Gross Profit ($ / %)"
-                  value={money(metrics.grossProfit)}
-                  hint={percent(metrics.grossProfitRate)}
+                  label="Gross Profit %"
+                  value={percent(metrics.grossProfitRate)}
                   tone="good"
                 />
               </Metrics>
@@ -400,22 +398,15 @@ export default async function Dashboard({
                 </Correction>
               }
             >
-              {/* Three, as the Definitions tab lists them. AR — Total and AR
-                  Over 30 Days ($) appear on the Weekly tab as the two figures
-                  Kyle types in to get the percentage; they are inputs, not
-                  metrics, so the percentage is what is shown. */}
+              {/* Five rows, as the Weekly tab has them. AR — Total and AR
+                  Over 30 Days ($) are the two figures the percentage is
+                  derived from, and Kyle keeps them on the sheet, so they are
+                  here too rather than folded away. */}
               <Metrics>
-                <Metric
-                  label="Cash Balance ($)"
-                  value={money(metrics.cashBalance)}
-                  tone="muted"
-                />
-                <Metric
-                  label="AR Over 30 Days (%)"
-                  value={percent(metrics.arOver30Rate)}
-                  hint={`${money(metrics.arOver30)} of ${money(metrics.arTotal)}`}
-                  tone="muted"
-                />
+                <Metric label="Cash Balance ($)" value={money(metrics.cashBalance)} tone="muted" />
+                <Metric label="AR — Total ($)" value={money(metrics.arTotal)} tone="muted" />
+                <Metric label="AR Over 30 Days ($)" value={money(metrics.arOver30)} tone="muted" />
+                <Metric label="AR Over 30 Days (%)" value={percent(metrics.arOver30Rate)} tone="muted" />
                 <Metric
                   label="Invoices Over 30 Days (#)"
                   value={count(metrics.invoicesOver30)}
