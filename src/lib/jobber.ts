@@ -149,6 +149,7 @@ export interface GraphQLError {
 export async function graphql<T>(
   query: string,
   variables: Record<string, unknown> = {},
+  attempt = 0,
 ): Promise<T> {
   const response = await fetch(JOBBER_GRAPHQL_URL, {
     method: "POST",
@@ -169,9 +170,17 @@ export async function graphql<T>(
   // GraphQL answers 200 with an errors array. Treat that as a failure rather
   // than reading a partial `data` object, or a missing field becomes a zero.
   if (payload.errors?.length) {
-    throw new Error(
-      `Jobber API errors: ${payload.errors.map((e) => e.message).join("; ")}`,
-    );
+    const messages = payload.errors.map((e) => e.message).join("; ");
+
+    // Throttling is not an error so much as "later". Jobber restores its
+    // budget at 500 points a second, so a short wait clears it. Retrying is
+    // far better than handing back a half-empty week.
+    if (/throttl/i.test(messages) && attempt < 3) {
+      await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+      return graphql<T>(query, variables, attempt + 1);
+    }
+
+    throw new Error(`Jobber API errors: ${messages}`);
   }
   if (!payload.data) throw new Error("Jobber API returned no data.");
   return payload.data;

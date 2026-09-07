@@ -20,6 +20,7 @@ import {
 import { reconcile } from "./metric-rules.ts";
 import type { Problem } from "./types";
 import { type ComputedWeek, computeWeek } from "./week-metrics.ts";
+import { saveWeek } from "./week-store.ts";
 
 export interface SyncResult {
   metrics: ComputedWeek;
@@ -95,8 +96,15 @@ export async function syncWeek(week: {
     severity: "warning",
   });
 
+  const result = { ...metrics, problems: [...metrics.problems, ...problems] };
+
+  // Freeze it. Storing the records alongside the figures means a definition
+  // change can be replayed over history without going back to Jobber, which
+  // matters while the cross-week counting rule is still unconfirmed.
+  await saveWeek(result, { quotes, jobs: jobs.map((m) => m.job) });
+
   return {
-    metrics: { ...metrics, problems: [...metrics.problems, ...problems] },
+    metrics: result,
     counts: { quotes: quotes.length, jobs: jobs.length },
   };
 }

@@ -3,6 +3,7 @@ import { PeriodNav } from "@/components/PeriodNav";
 import { SectionNav, type Section } from "@/components/SectionNav";
 import { computeWeek, count, money, percent } from "@/lib/week-metrics";
 import { syncWeek } from "@/lib/sync";
+import { loadWeek, syncedWeeks } from "@/lib/week-store";
 import { TokenExpired } from "@/lib/token-store";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui";
@@ -45,9 +46,6 @@ const SECTIONS: readonly Section[] = [
   { id: "cash", ordinal: "03", title: "Cash & AR", audience: "Chase + Alana", ready: false },
 ];
 
-/** Weeks with stored figures. Becomes a Supabase query once syncing exists. */
-const SYNCED_WEEKS = [VERIFIED_WEEK_MONDAY] as const;
-
 export default async function Dashboard({
   searchParams,
 }: {
@@ -66,7 +64,15 @@ export default async function Dashboard({
 
   const week = weekFromParam(params.week, VERIFIED_WEEK_MONDAY);
   const month = params.month ?? monthOf(week.start);
-  const hasFigures = kind === "weekly" && SYNCED_WEEKS.includes(week.start as never);
+
+  // A stored week always wins. It was computed once, after the data settled,
+  // and re-fetching it would both drift and burn Jobber's rate limit.
+  const stored = kind === "weekly" ? await loadWeek(week.start).catch(() => null) : null;
+  const storedWeeks = await syncedWeeks();
+
+  const isSample =
+    !stored && kind === "weekly" && week.start === VERIFIED_WEEK_MONDAY;
+  const hasFigures = isSample;
 
   /**
    * Pull the week live rather than reading a stored snapshot.
@@ -81,7 +87,8 @@ export default async function Dashboard({
    *
    * `?fetch=0` opts out, for when Jobber is down and the error is in the way.
    */
-  const wantsLive = kind === "weekly" && !hasFigures && params.fetch !== "0";
+  const wantsLive =
+    kind === "weekly" && !stored && !isSample && params.fetch !== "0";
   let live: Awaited<ReturnType<typeof syncWeek>> | null = null;
   let liveError: string | null = null;
 
@@ -101,7 +108,9 @@ export default async function Dashboard({
     }
   }
 
-  const metrics = live
+  const metrics = stored
+    ? stored.metrics
+    : live
     ? live.metrics
     : hasFigures
     ? computeWeek({
@@ -153,10 +162,21 @@ export default async function Dashboard({
             kind={kind}
             weekStart={week.start}
             month={month}
-            syncedPeriods={SYNCED_WEEKS}
+            syncedPeriods={storedWeeks}
           />
 
-          {live ? (
+          {stored ? (
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <Pill tone="good">Stored</Pill>
+              <p className="font-mono text-[11px] text-ink-4">
+                {`fetched ${new Date(stored.syncedAt).toLocaleDateString("en-CA", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}`}
+              </p>
+            </div>
+          ) : live ? (
             <div className="mt-6 flex flex-wrap items-center gap-3">
               {/* Live and stored must never look alike. A stored week is
                   frozen and will read the same forever; this one is whatever

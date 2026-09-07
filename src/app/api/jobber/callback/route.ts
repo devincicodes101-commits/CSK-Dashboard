@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { exchangeCode, saveConnection } from "@/lib/jobber";
 import { fetchAccountName } from "@/lib/jobber-queries";
+import { loadTokens } from "@/lib/token-store";
 
 /**
  * Where Jobber sends the browser back after someone approves the app.
@@ -27,6 +28,21 @@ export async function GET(request: NextRequest) {
   // Missing and mismatched mean different things, and conflating them sends
   // people hunting for a security problem when they simply took too long.
   if (!expected) {
+    // The state cookie is deleted the moment a connection succeeds, so
+    // arriving here without one usually means this callback URL is being
+    // replayed — a refresh, or the back button, after it already worked.
+    // If a connection is in fact stored, nothing is wrong and saying
+    // "expired" sends someone off to fix a problem they do not have.
+    const existing = await loadTokens("jobber").catch(() => null);
+    if (existing) {
+      const settled = new URL("/settings", request.url);
+      settled.searchParams.set("connected", "jobber");
+      if (existing.connectedAccount) {
+        settled.searchParams.set("account", existing.connectedAccount);
+      }
+      return NextResponse.redirect(settled);
+    }
+
     return fail(
       request,
       "That connection attempt expired, or its link had already been used. " +

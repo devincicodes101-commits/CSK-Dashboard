@@ -36,7 +36,7 @@ const QUOTE_FIELDS = `
  */
 export const QUOTES_SENT = `
   query QuotesSent($from: ISO8601DateTime!, $to: ISO8601DateTime!, $after: String) {
-    quotes(filter: { sentAt: { after: $from, before: $to } }, first: 100, after: $after) {
+    quotes(filter: { sentAt: { after: $from, before: $to } }, first: 50, after: $after) {
       nodes { ${QUOTE_FIELDS} }
       pageInfo { hasNextPage endCursor }
     }
@@ -64,7 +64,7 @@ export const QUOTES_SENT = `
  */
 export const QUOTES_TRANSITIONED = `
   query QuotesTransitioned($since: ISO8601DateTime!, $after: String) {
-    quotes(filter: { updatedAt: { after: $since } }, first: 100, after: $after) {
+    quotes(filter: { updatedAt: { after: $since } }, first: 50, after: $after) {
       nodes { ${QUOTE_FIELDS} }
       pageInfo { hasNextPage endCursor }
     }
@@ -113,7 +113,7 @@ export const JOBS_COMPLETED = `
   query JobsCompleted($from: ISO8601DateTime!, $to: ISO8601DateTime!, $after: String) {
     jobs(
       filter: { jobType: ONE_OFF, completedAt: { after: $from, before: $to } }
-      first: 50
+      first: 25
       after: $after
     ) {
       nodes {
