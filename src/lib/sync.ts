@@ -58,13 +58,26 @@ export async function syncWeek(week: {
   // Two queries, because Jobber will filter on sentAt but not on the dates a
   // quote was actually won. See QUOTES_TRANSITIONED for why the second one has
   // no upper bound.
-  const [sent, possiblyWon, jobs, requests, newClients] = await Promise.all([
+  // Everything Jobber needs, and everything QuickBooks needs, started
+  // together. They are separate systems with separate rate limits, and
+  // running them in sequence doubled the wait on a week nobody had opened
+  // before.
+  const jobberWork = Promise.all([
     fetchQuotesSent(week.start, week.end),
     fetchQuotesPossiblyWon(week.start),
     fetchJobsCompleted(week.start, week.end),
     fetchRequestsCreated(week.start, week.end),
     fetchNewClients(week.start, week.end),
   ]);
+
+  // As at the SUNDAY. Cash and receivables are a photograph at the end of the
+  // week, not a total across it.
+  const quickBooksWork = Promise.all([
+    fetchCashBalance(week.end),
+    fetchAr(week.end),
+  ]).catch((error: unknown) => error as Error);
+
+  const [sent, possiblyWon, jobs, requests, newClients] = await jobberWork;
 
   // Invoices separately, and allowed to fail. InvoiceAmounts' field names are
   // assumed rather than confirmed, and one uncertain metric must not take the
@@ -83,8 +96,8 @@ export async function syncWeek(week: {
   }
 
   // QuickBooks, allowed to fail on its own. Cash & AR going missing must not
-  // take the sales and revenue blocks down with it — they are separate
-  // systems and separate audiences.
+  // take the sales and revenue blocks down with it — separate systems,
+  // separate audiences.
   let quickBooks = {
     cashBalance: null as number | null,
     arTotal: null as number | null,
@@ -92,15 +105,16 @@ export async function syncWeek(week: {
     invoicesOver30: null as number | null,
   };
 
-  try {
-    // As at the SUNDAY, not today. Cash and receivables are a photograph
-    // taken at the end of the week, unlike the Jobber figures which are
-    // totals across it. Using today's balance would make every historical
-    // week show the same number and change whenever anyone looked.
-    const [cash, ar] = await Promise.all([
-      fetchCashBalance(week.end),
-      fetchAr(week.end),
-    ]);
+  const qbo = await quickBooksWork;
+
+  if (qbo instanceof Error) {
+    problems.push({
+      where: "Cash & AR",
+      message: `QuickBooks could not be read: ${qbo.message}`,
+      severity: "warning",
+    });
+  } else {
+    const [cash, ar] = qbo;
 
     quickBooks = {
       cashBalance: cash.balance,
@@ -127,13 +141,6 @@ export async function syncWeek(week: {
         });
       }
     }
-  } catch (error) {
-    problems.push({
-      where: "Cash & AR",
-      message:
-        `QuickBooks could not be read: ${error instanceof Error ? error.message : String(error)}`,
-      severity: "warning",
-    });
   }
 
   // Union by quote number. A quote can be in both lists — sent on Monday and
