@@ -187,7 +187,7 @@ export default async function Dashboard({
                     quotes query has no upper bound on updatedAt by design, so
                     it scans everything touched since the week began and the
                     date rules narrow it. Say scanned, not counted. */}
-                {`${live.counts.jobs} jobs closed · ${live.counts.quotes} quotes scanned`}
+                {`${live.counts.jobs} jobs closed · ${live.counts.requests} requests · ${live.counts.quotes} quotes scanned`}
               </p>
             </div>
           ) : hasFigures ? (

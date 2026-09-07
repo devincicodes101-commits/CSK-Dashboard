@@ -13,9 +13,11 @@
 
 import { type Quote } from "./metric-rules.ts";
 import {
+  fetchInvoicedValue,
   fetchJobsCompleted,
   fetchQuotesPossiblyWon,
   fetchQuotesSent,
+  fetchRequestsCreated,
 } from "./jobber-queries.ts";
 import { reconcile } from "./metric-rules.ts";
 import type { Problem } from "./types";
@@ -25,7 +27,7 @@ import { saveWeek } from "./week-store.ts";
 export interface SyncResult {
   metrics: ComputedWeek;
   /** How many records were involved, for the "where did this come from" line. */
-  counts: { quotes: number; jobs: number };
+  counts: { quotes: number; jobs: number; requests: number };
 }
 
 export async function syncWeek(week: {
@@ -37,11 +39,28 @@ export async function syncWeek(week: {
   // Two queries, because Jobber will filter on sentAt but not on the dates a
   // quote was actually won. See QUOTES_TRANSITIONED for why the second one has
   // no upper bound.
-  const [sent, possiblyWon, jobs] = await Promise.all([
+  const [sent, possiblyWon, jobs, requests] = await Promise.all([
     fetchQuotesSent(week.start, week.end),
     fetchQuotesPossiblyWon(week.start),
     fetchJobsCompleted(week.start, week.end),
+    fetchRequestsCreated(week.start, week.end),
   ]);
+
+  // Invoices separately, and allowed to fail. InvoiceAmounts' field names are
+  // assumed rather than confirmed, and one uncertain metric must not take the
+  // other eighteen down with it.
+  let invoicedValue: number | null = null;
+  try {
+    invoicedValue = (await fetchInvoicedValue(week.start, week.end)).value;
+  } catch (error) {
+    problems.push({
+      where: "Revenue — invoiced",
+      message:
+        `Could not be read: ${error instanceof Error ? error.message : String(error)}. ` +
+        "Every other figure on this week is unaffected.",
+      severity: "warning",
+    });
+  }
 
   // Union by quote number. A quote can be in both lists — sent on Monday and
   // won on Thursday — and must appear once.
@@ -71,14 +90,15 @@ export async function syncWeek(week: {
     // in the week rather than a partial set.
     quotesAreComplete: true,
     cards: {
-      // Not fetched yet. These three come from Jobber's Insights cards, and
-      // the filter shapes for `requests` and `invoices` have not been read off
-      // the schema — guessing field names is what cost us a round earlier.
+      // Jobber has no `leads` query at all, and its Insights screen shows New
+      // leads and New requests as different numbers (12 and 22 in the verified
+      // week). Reporting requests as leads would be a guess dressed as a fact.
       newLeads: null,
-      newRequests: null,
+      newRequests: requests.length,
+      // Derived from the records; see quotesAreComplete above.
       quotesSentCount: null,
       quotesSentValue: null,
-      invoicedValue: null,
+      invoicedValue,
     },
     quickBooks: {
       cashBalance: null,
@@ -89,10 +109,11 @@ export async function syncWeek(week: {
   });
 
   problems.push({
-    where: "New leads and invoiced",
+    where: "New leads",
     message:
-      "Not fetched. These need the requests and invoices queries, whose " +
-      "filter shapes still have to be read off Jobber's schema.",
+      "Jobber's API has no leads query, and its Insights screen counts leads " +
+      "and requests differently. Requests are shown instead until CSK confirm " +
+      "which of the two they mean.",
     severity: "warning",
   });
 
@@ -105,6 +126,6 @@ export async function syncWeek(week: {
 
   return {
     metrics: result,
-    counts: { quotes: quotes.length, jobs: jobs.length },
+    counts: { quotes: quotes.length, jobs: jobs.length, requests: requests.length },
   };
 }

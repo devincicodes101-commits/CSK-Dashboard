@@ -257,3 +257,95 @@ export async function fetchAccountName(): Promise<string | null> {
   const data = await graphql<{ account: { name: string } | null }>(ACCOUNT_NAME);
   return data.account?.name ?? null;
 }
+
+/* ---------------------------------------------------------------- requests */
+
+/**
+ * Requests created inside the week — Jobber's "New requests" card.
+ *
+ * RequestFilterAttributes takes createdAt, so this is exact server-side.
+ *
+ * Note what this is NOT. Jobber's Insights shows "New leads" and "New
+ * requests" as separate figures — 12 and 22 for the verified week — and there
+ * is no `leads` query in the schema at all. Until CSK say which they mean,
+ * only the one that can be derived unambiguously is reported.
+ */
+export const REQUESTS_CREATED = `
+  query RequestsCreated($from: ISO8601DateTime!, $to: ISO8601DateTime!, $after: String) {
+    requests(filter: { createdAt: { after: $from, before: $to } }, first: 50, after: $after) {
+      nodes { id createdAt requestStatus source }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+`;
+
+interface RawRequest {
+  id: string;
+  createdAt: string;
+  requestStatus: string;
+  source: string;
+}
+
+export async function fetchRequestsCreated(
+  weekStart: string,
+  weekEnd: string,
+): Promise<RawRequest[]> {
+  const { from, to } = weekBounds(weekStart, weekEnd);
+  return paginate<RawRequest>(REQUESTS_CREATED, { from, to }, (d) =>
+    (d as { requests: { nodes: RawRequest[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } }).requests,
+  );
+}
+
+/* ---------------------------------------------------------------- invoices */
+
+/**
+ * Invoices issued inside the week — the "Revenue — Invoiced" line.
+ *
+ * InvoiceFilterAttributes takes issuedDate, which is what "invoiced within
+ * the week" means; createdAt would count drafts written earlier and issued
+ * later.
+ *
+ * `amounts` is an InvoiceAmounts object whose field names have NOT been read
+ * off the schema. QuoteAmounts carries subtotal and total, and the same two
+ * are assumed here. The sync calls this inside a try/catch precisely because
+ * that is an assumption: a wrong field name degrades one metric to null with
+ * a visible problem, rather than failing the whole week.
+ */
+export const INVOICES_ISSUED = `
+  query InvoicesIssued($from: ISO8601DateTime!, $to: ISO8601DateTime!, $after: String) {
+    invoices(filter: { issuedDate: { after: $from, before: $to } }, first: 50, after: $after) {
+      nodes {
+        id
+        invoiceNumber
+        issuedDate
+        invoiceStatus
+        amounts { subtotal total }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+`;
+
+interface RawInvoice {
+  id: string;
+  invoiceNumber: string;
+  issuedDate: string | null;
+  invoiceStatus: string;
+  amounts: { subtotal: number; total: number } | null;
+}
+
+/** Pre-tax, like every other dollar figure on this dashboard. */
+export async function fetchInvoicedValue(
+  weekStart: string,
+  weekEnd: string,
+): Promise<{ value: number; count: number }> {
+  const { from, to } = weekBounds(weekStart, weekEnd);
+  const nodes = await paginate<RawInvoice>(INVOICES_ISSUED, { from, to }, (d) =>
+    (d as { invoices: { nodes: RawInvoice[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } }).invoices,
+  );
+
+  return {
+    value: round2(nodes.reduce((sum, i) => sum + (i.amounts?.subtotal ?? 0), 0)),
+    count: nodes.length,
+  };
+}
