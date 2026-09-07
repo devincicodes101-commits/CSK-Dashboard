@@ -82,8 +82,16 @@ export default async function Dashboard({
    * week, which is the problem.
    */
   const isStale = Boolean(found && found.syncVersion < SYNC_VERSION);
-  const isSample =
-    !found && kind === "weekly" && week.start === VERIFIED_WEEK_MONDAY;
+
+  /**
+   * The week we checked by hand. Its identity, not its rendering.
+   *
+   * Used for the correction notes, which quote real figures from Jobber's own
+   * screens for this week — 29%, $3,675, 51%, $28,145 — and those stay true
+   * whether the figures on screen came from the fixture or from the API.
+   */
+  const isVerifiedWeek =
+    kind === "weekly" && week.start === VERIFIED_WEEK_MONDAY;
 
   /**
    * Fetch when there is nothing stored, or when what is stored is stale.
@@ -96,9 +104,16 @@ export default async function Dashboard({
    * `?fetch=0` still opts out, for when Jobber is down and the error is in
    * the way of reading the older figures.
    */
+  /**
+   * Fetch every week, including the verified one.
+   *
+   * The fixture used to short-circuit 3-9 August entirely, which was right
+   * while nothing was connected and wrong the moment something was: it left
+   * the one week whose answers we know by hand showing canned Jobber figures
+   * and an empty Cash & AR block. It is now a fallback, not a gate.
+   */
   const wantsLive =
     kind === "weekly" &&
-    !isSample &&
     params.fetch !== "0" &&
     (!found || isStale || params.resync === "1");
 
@@ -128,11 +143,15 @@ export default async function Dashboard({
   const stored = live ? null : found;
   const servingStale = Boolean(!live && isStale);
 
+  // The fixture only appears when there is nothing else to show — no live
+  // fetch, nothing stored — on the one week it describes.
+  const usingSample = !live && !found && isVerifiedWeek;
+
   const metrics = live
     ? live.metrics
     : found
     ? found.metrics
-    : isSample
+    : usingSample
     ? computeWeek({
         week,
         quotes: VERIFIED_QUOTES,
@@ -236,9 +255,12 @@ export default async function Dashboard({
                 {`${live.counts.jobs} jobs closed · ${live.counts.requests} requests · ${live.counts.quotes} quotes scanned`}
               </p>
             </div>
-          ) : isSample ? (
-            <div className="mt-6">
+          ) : usingSample ? (
+            <div className="mt-6 flex flex-wrap items-center gap-3">
               <Pill tone="warn">Sample week</Pill>
+              <p className="font-mono text-[11px] text-ink-4">
+                figures checked by hand; neither system could be reached
+              </p>
             </div>
           ) : null}
         </header>
@@ -300,7 +322,7 @@ export default async function Dashboard({
                     </Correction>
                   ) : null}
                   <Correction>
-                    {isSample
+                    {isVerifiedWeek
                       ? `Jobber’s own screen reads ${percent(
                           JOBBER_DISPLAYED.conversionRate,
                           0,
@@ -314,7 +336,7 @@ export default async function Dashboard({
                     are not directly comparable.
                   </Correction>
                   <Correction>
-                    {isSample
+                    {isVerifiedWeek
                       ? `Values are pre-tax. Jobber’s card shows ${money(
                           JOBBER_DISPLAYED.convertedValue,
                         )} for converted quotes this week, which includes GST.`
@@ -362,7 +384,7 @@ export default async function Dashboard({
               note={
                 <>
                   <Correction>
-                    {isSample
+                    {isVerifiedWeek
                       ? `Gross profit is revenue less labour and materials, worked from the dollars. Jobber reports ${percent(
                           JOBBER_DISPLAYED.averageProfitRate,
                           0,
@@ -372,7 +394,7 @@ export default async function Dashboard({
                       : "Gross profit is revenue less labour and materials, worked from the dollars. Jobber’s own profit percentage averages each job equally, so a small job counts as much as a large one."}
                   </Correction>
                   <Correction>
-                    {isSample
+                    {isVerifiedWeek
                       ? `Revenue is the sum of the ${metrics.jobsClosed} jobs closed. The summary card above that same table reads ${money(
                           JOBBER_DISPLAYED.revenueCard,
                         )}, counting a different set of jobs.`

@@ -35,10 +35,15 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // BalanceSheet takes as_of; the ageing reports take report_date.
+  // The Balance Sheet takes start_date/end_date, NOT as_of. as_of is accepted
+  // without complaint and then ignored: QBO falls back to DateMacro "this
+  // fiscal year-to-date" and returns today. This route is what proved that, so
+  // it now sends what the real query sends — otherwise dumping it to check a
+  // date would reproduce the bug instead of exposing it.
   const query = new URLSearchParams({ minorversion: "70" });
-  if (name === "BalanceSheet") {
-    query.set("as_of", date);
+  if (name === "BalanceSheet" || name === "ProfitAndLoss") {
+    query.set("start_date", date);
+    query.set("end_date", date);
     query.set("accounting_method", "Accrual");
   } else {
     query.set("report_date", date);
