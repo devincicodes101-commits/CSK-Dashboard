@@ -2,15 +2,22 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, authConfigured, isValidSession } from "@/lib/auth";
 
 /**
- * Nothing is served without a session, apart from the pages that must be
- * public.
+ * The passphrase gate, enforced only when one is set.
  *
- * Fails CLOSED. If DASHBOARD_PASSWORD is missing the dashboard refuses to
- * render rather than falling open — a misconfigured deploy that quietly
- * published CSK's bank balance is exactly the failure this exists to prevent.
+ * DASHBOARD_PASSWORD set   -> everything requires a session
+ * DASHBOARD_PASSWORD unset -> the dashboard is public
  *
- * The policy pages stay public because Intuit fetches them during review and
- * a privacy policy behind a login is no privacy policy at all.
+ * It used to refuse to serve at all without a passphrase. That was the safer
+ * default and it was changed on request, so be clear about what the open mode
+ * means: anyone with the URL can read CSK's revenue, margins, win rates and
+ * client names, and once QuickBooks is connected, their bank balance and who
+ * owes them money. There is no obscurity in a Vercel URL.
+ *
+ * Turning it back on is one environment variable and a redeploy. The login
+ * page, the session cookie and the sign-out link all stay in place.
+ *
+ * The policy pages are public either way: Intuit fetches them during review,
+ * and a privacy policy behind a login is not one.
  */
 
 const PUBLIC = new Set(["/login", "/privacy", "/terms"]);
@@ -22,13 +29,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (!authConfigured()) {
-    return new NextResponse(
-      "This dashboard has no passphrase configured, so it will not serve " +
-        "anything. Set DASHBOARD_PASSWORD and redeploy.",
-      { status: 503, headers: { "content-type": "text/plain" } },
-    );
-  }
+  // No passphrase configured: serve everything. See the note above.
+  if (!authConfigured()) return NextResponse.next();
 
   if (await isValidSession(request.cookies.get(SESSION_COOKIE)?.value)) {
     return NextResponse.next();

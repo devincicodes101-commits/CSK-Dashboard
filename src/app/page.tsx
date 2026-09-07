@@ -3,6 +3,7 @@ import { PeriodNav } from "@/components/PeriodNav";
 import { SectionNav, type Section } from "@/components/SectionNav";
 import { computeWeek, count, money, percent } from "@/lib/week-metrics";
 import { SYNC_VERSION, syncWeek } from "@/lib/sync";
+import { authConfigured } from "@/lib/auth";
 import { loadWeek, syncedWeeks } from "@/lib/week-store";
 import { TokenExpired } from "@/lib/token-store";
 import { redirect } from "next/navigation";
@@ -468,6 +469,16 @@ export default async function Dashboard({
             ) : null}
           </div>
         </div>
+
+        {!authConfigured() ? (
+          <p className="mt-10 rounded-lg border border-warn/40 bg-warn-tint px-5 py-4 font-mono text-[11px] leading-relaxed text-warn">
+            {/* Visible on the page rather than only in a README. Whoever opens
+                this should know who else can. */}
+            This dashboard has no passphrase, so anyone with the link can read
+            these figures. Set DASHBOARD_PASSWORD in Vercel and redeploy to
+            require a sign-in.
+          </p>
+        ) : null}
 
         <footer className="mt-14 border-t border-line pt-6">
           <p className="micro text-ink-4">
