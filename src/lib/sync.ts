@@ -24,6 +24,7 @@ import { reconcile } from "./metric-rules.ts";
 import type { Problem } from "./types";
 import { type ComputedWeek, computeWeek } from "./week-metrics.ts";
 import { saveWeek } from "./week-store.ts";
+import { fetchAr, fetchCashBalance } from "./quickbooks-queries.ts";
 
 /**
  * Bumped whenever a change would make a stored week wrong.
@@ -40,7 +41,7 @@ import { saveWeek } from "./week-store.ts";
  * Raise it for anything that changes the numbers: a definition, a query, a
  * date boundary. Not for wording or layout.
  */
-export const SYNC_VERSION = 5;
+export const SYNC_VERSION = 6;
 
 export interface SyncResult {
   metrics: ComputedWeek;
@@ -77,6 +78,60 @@ export async function syncWeek(week: {
       message:
         `Could not be read: ${error instanceof Error ? error.message : String(error)}. ` +
         "Every other figure on this week is unaffected.",
+      severity: "warning",
+    });
+  }
+
+  // QuickBooks, allowed to fail on its own. Cash & AR going missing must not
+  // take the sales and revenue blocks down with it — they are separate
+  // systems and separate audiences.
+  let quickBooks = {
+    cashBalance: null as number | null,
+    arTotal: null as number | null,
+    arOver30: null as number | null,
+    invoicesOver30: null as number | null,
+  };
+
+  try {
+    // As at the SUNDAY, not today. Cash and receivables are a photograph
+    // taken at the end of the week, unlike the Jobber figures which are
+    // totals across it. Using today's balance would make every historical
+    // week show the same number and change whenever anyone looked.
+    const [cash, ar] = await Promise.all([
+      fetchCashBalance(week.end),
+      fetchAr(week.end),
+    ]);
+
+    quickBooks = {
+      cashBalance: cash.balance,
+      arTotal: ar.total,
+      arOver30: ar.overThirty,
+      invoicesOver30: ar.invoicesOverThirty,
+    };
+
+    for (const message of [...cash.problems, ...ar.problems]) {
+      problems.push({ where: "Cash & AR", message, severity: "warning" });
+    }
+
+    if (cash.excluded.length > 0 && cash.balance !== null) {
+      const held = cash.excluded.reduce((sum, a) => sum + a.amount, 0);
+      if (Math.abs(held) > 0.005) {
+        problems.push({
+          where: "Cash Balance",
+          message:
+            `Money in the bank only. A further ${held.toFixed(2)} sits in ` +
+            cash.excluded.map((a) => a.name).join(", ") +
+            ", which the Balance Sheet includes under Cash and Cash " +
+            "Equivalent but is not yet in an account.",
+          severity: "warning",
+        });
+      }
+    }
+  } catch (error) {
+    problems.push({
+      where: "Cash & AR",
+      message:
+        `QuickBooks could not be read: ${error instanceof Error ? error.message : String(error)}`,
       severity: "warning",
     });
   }
@@ -119,12 +174,7 @@ export async function syncWeek(week: {
       quotesSentValue: null,
       invoicedValue,
     },
-    quickBooks: {
-      cashBalance: null,
-      arTotal: null,
-      arOver30: null,
-      invoicesOver30: null,
-    },
+    quickBooks,
   });
 
   problems.push({
