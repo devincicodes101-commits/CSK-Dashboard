@@ -1,4 +1,4 @@
-import { Block, Correction, EmptyBlock, Metric, Metrics, Pill } from "@/components/ui";
+import { Block, Correction, Metric, Metrics, Pill } from "@/components/ui";
 import { PeriodNav } from "@/components/PeriodNav";
 import { SectionNav, type Section } from "@/components/SectionNav";
 import { computeWeek, count, money, percent } from "@/lib/week-metrics";
@@ -285,38 +285,26 @@ export default async function Dashboard({
                 </>
               }
             >
+              {/* Labels are the client's own row names from the Weekly tab,
+                  verbatim. Chase reads these next to the spreadsheet he has
+                  used for years; a tidier wording would just make him check
+                  whether it means the same thing. That includes the American
+                  "Labor" and the lower-case w in "Total Quotes won ($)". */}
               <Metrics>
+                <Metric label="New Leads" value={count(metrics.newLeads)} />
+                <Metric label="Quotes Sent" value={count(metrics.quotesSentCount)} />
+                <Metric label="Quotes Converted (#)" value={count(metrics.convertedCount)} />
+                <Metric label="Quotes Approved (#)" value={count(metrics.approvedCount)} />
+                <Metric label="Total Quotes Won (#)" value={count(metrics.wonCount)} />
                 <Metric
-                  label="New leads"
-                  value={count(metrics.newLeads)}
-                  hint={`${count(metrics.newRequests)} requests`}
-                />
-                <Metric
-                  label="Quotes sent"
-                  value={count(metrics.quotesSentCount)}
-                  hint={money(metrics.quotesSentValue)}
-                />
-                <Metric
-                  label="Converted"
-                  value={count(metrics.convertedCount)}
-                  hint={money(metrics.convertedValue)}
-                />
-                <Metric
-                  label="Approved"
-                  value={count(metrics.approvedCount)}
-                  hint={money(metrics.approvedValue)}
-                />
-                <Metric
-                  label="Total won"
-                  value={count(metrics.wonCount)}
-                  hint={money(metrics.wonValue)}
-                />
-                <Metric
-                  label="Win rate"
+                  label="Quote Conversion %"
                   value={percent(metrics.conversionRate)}
-                  hint="won / sent"
                   tone="good"
                 />
+                <Metric label="Quotes Converted ($)" value={money(metrics.convertedValue)} />
+                <Metric label="Quotes Approved ($)" value={money(metrics.approvedValue)} />
+                <Metric label="Total Quotes won ($)" value={money(metrics.wonValue)} />
+                <Metric label="Quotes Sent ($)" value={money(metrics.quotesSentValue)} />
               </Metrics>
             </Block>
 
@@ -346,28 +334,30 @@ export default async function Dashboard({
             >
               <Metrics>
                 <Metric
-                  label="Invoiced"
+                  label="Revenue — Invoiced ($)"
                   value={money(metrics.invoicedValue)}
-                  hint="approximate"
-                  tone="muted"
                 />
                 <Metric
-                  label="Revenue closed"
+                  label="Revenue — Jobs Closed ($)"
                   value={money(metrics.revenueClosed)}
                   hint={`${metrics.jobsClosed} jobs`}
                 />
-                <Metric label="Labour" value={money(metrics.labourCost)} />
-                <Metric label="Materials" value={money(metrics.materialCost)} />
-                <Metric label="Gross profit" value={money(metrics.grossProfit)} />
+                <Metric label="Labor Cost ($)" value={money(metrics.labourCost)} />
+                <Metric label="Material Cost ($)" value={money(metrics.materialCost)} />
+                <Metric label="Gross Profit ($)" value={money(metrics.grossProfit)} />
                 <Metric
-                  label="Gross margin"
+                  label="Gross Profit %"
                   value={percent(metrics.grossProfitRate)}
-                  hint="from dollars"
                   tone="good"
                 />
+                {/* Not on the client's Weekly tab — it lives on Monthly, where
+                    it feeds Labour Efficiency. Shown here because it is free
+                    once the jobs are fetched and it is the one Jobber sum
+                    their own Read Me says can be trusted. */}
                 <Metric
-                  label="Time tracked"
-                  value={`${metrics.timeTrackedHours.toFixed(1)}h`}
+                  label="Time Tracked (hrs)"
+                  value={metrics.timeTrackedHours.toFixed(1)}
+                  tone="muted"
                 />
               </Metrics>
             </Block>
@@ -386,10 +376,16 @@ export default async function Dashboard({
                 </Correction>
               }
             >
-              <EmptyBlock>
-                QuickBooks isn&rsquo;t connected. Bank balance, total owed,
-                amount over 30 days and the late invoice count appear here.
-              </EmptyBlock>
+              {/* Named and shown rather than hidden behind an empty state, so
+                  the client can see all five of their rows are accounted for
+                  and simply waiting on QuickBooks. */}
+              <Metrics>
+                <Metric label="Cash Balance ($)" value={money(metrics.cashBalance)} tone="muted" />
+                <Metric label="AR — Total ($)" value={money(metrics.arTotal)} tone="muted" />
+                <Metric label="AR Over 30 Days ($)" value={money(metrics.arOver30)} tone="muted" />
+                <Metric label="AR Over 30 Days (%)" value={percent(metrics.arOver30Rate)} tone="muted" />
+                <Metric label="Invoices Over 30 Days (#)" value={count(metrics.invoicesOver30)} tone="muted" />
+              </Metrics>
             </Block>
           </div>
         )}
