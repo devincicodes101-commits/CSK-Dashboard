@@ -38,7 +38,14 @@ interface ReportRow {
 }
 
 interface Report {
-  Header?: { Time?: string; ReportName?: string; StartPeriod?: string; EndPeriod?: string };
+  Header?: {
+    Time?: string;
+    ReportName?: string;
+    StartPeriod?: string;
+    EndPeriod?: string;
+    /** Present when QBO fell back to a preset range — see assertAsOf. */
+    DateMacro?: string;
+  };
   Columns?: { Column?: { ColTitle?: string; ColType?: string }[] };
   Rows?: { Row?: ReportRow[] };
 }
@@ -61,6 +68,34 @@ async function report(name: string, params: Record<string, string>): Promise<Rep
   const query = new URLSearchParams({ ...params, minorversion: "70" });
   const response = await qboFetch(`reports/${name}?${query}`);
   return (await response.json()) as Report;
+}
+
+/**
+ * Refuses a report that came back for a date we did not ask for.
+ *
+ * This exists because of a real failure. The Balance Sheet was requested with
+ * `as_of`, which QuickBooks does not accept — it silently ignored the
+ * parameter, applied DateMacro "this fiscal year-to-date", and returned
+ * TODAY. Every cash balance for every week was today's number, and every one
+ * of them looked completely plausible.
+ *
+ * The report tells you, in its own header, which period it actually covers.
+ * Reading it back turns a silent wrong answer into a stated one.
+ */
+function assertAsOf(data: Report, expected: string, name: string): string | null {
+  const end = data.Header?.EndPeriod;
+  const macro = data.Header?.DateMacro;
+
+  if (macro) {
+    return (
+      `${name} came back for "${macro}" (${data.Header?.StartPeriod} to ${end}) ` +
+      `rather than as at ${expected}. The date parameter was not accepted.`
+    );
+  }
+  if (end && end !== expected) {
+    return `${name} came back as at ${end}, not ${expected}.`;
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------ cash balance */
@@ -145,10 +180,19 @@ export async function fetchCashBalance(asOf: string): Promise<CashResult> {
     };
   }
 
+  // end_date, NOT as_of. A balance sheet is a position at a date, and QBO
+  // expresses that as the end of a range; `as_of` is silently ignored.
+  // start_date is supplied too so no DateMacro default can creep back in.
   const sheet = await report("BalanceSheet", {
-    as_of: asOf,
+    start_date: asOf,
+    end_date: asOf,
     accounting_method: "Accrual",
   });
+
+  const wrongDate = assertAsOf(sheet, asOf, "The balance sheet");
+  if (wrongDate) {
+    return { balance: null, counted: [], excluded: [], problems: [wrongDate] };
+  }
 
   const counted: { name: string; amount: number }[] = [];
   const excluded: { name: string; amount: number }[] = [];
@@ -166,21 +210,19 @@ export async function fetchCashBalance(asOf: string): Promise<CashResult> {
     // list says "1020 RBC Chequing (4810)" too — but compare loosely, since a
     // renamed account should not silently drop out of the total.
     const key = label.toLowerCase();
-    if (names.has(key)) counted.push({ name: label, amount });
-    else if ([...names].some((n) => key.includes(n) || n.includes(key))) {
-      counted.push({ name: label, amount });
-    }
-  }
+    const isBank =
+      names.has(key) || [...names].some((n) => key.includes(n) || n.includes(key));
 
-  // Anything in the cash grouping we did NOT count, so the difference from
-  // the report's own subtotal is explainable rather than mysterious.
-  for (const row of flatten(sheet.Rows?.Row)) {
-    const cells = row.ColData;
-    const label = cells?.[0]?.value?.trim();
-    if (!label || !cells) continue;
-    if (/undeposited|deposit clearing|for recon/i.test(label)) {
-      excluded.push({ name: label, amount: money(cells[cells.length - 1]?.value) });
-    }
+    // "Deposit clearing" and "For recon" are typed Bank in QuickBooks but hold
+    // money in transit, not money in an account — Deposit clearing was sitting
+    // at MINUS $12,964. Including them was quietly reducing the balance by
+    // that amount. Undeposited Funds is not typed Bank and never matched, but
+    // is named here too so the note below accounts for the whole difference
+    // from the report's own Cash and Cash Equivalent subtotal.
+    const isHolding = /clearing|for recon|undeposited/i.test(label);
+
+    if (isBank && !isHolding) counted.push({ name: label, amount });
+    else if (isHolding) excluded.push({ name: label, amount });
   }
 
   if (counted.length === 0) {
@@ -216,6 +258,12 @@ export async function fetchAr(asOf: string): Promise<ArResult> {
   const problems: string[] = [];
 
   const summary = await report("AgedReceivables", { report_date: asOf });
+
+  // report_date IS accepted here — the ageing figures reconciled exactly to
+  // CSK's own exports for 16 August. Checked anyway, because the balance
+  // sheet taught us that a report can quietly answer a different question.
+  const wrongDate = assertAsOf(summary, asOf, "The aged receivables report");
+  if (wrongDate) problems.push(wrongDate);
 
   // The grand total is the last Summary in the tree.
   const summaries = flatten(summary.Rows?.Row)
