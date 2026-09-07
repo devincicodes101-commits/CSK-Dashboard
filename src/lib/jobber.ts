@@ -6,7 +6,7 @@
  * API version 2025-04-16.
  */
 
-import { loadTokens, saveTokens } from "./token-store";
+import { TokenExpired, backend, loadTokens, saveTokens } from "./token-store";
 
 export const JOBBER_AUTHORIZE_URL = "https://api.getjobber.com/api/oauth/authorize";
 export const JOBBER_TOKEN_URL = "https://api.getjobber.com/api/oauth/token";
@@ -115,9 +115,29 @@ export async function accessToken(): Promise<string> {
 
   if (stored.expiresAt - Date.now() > 60_000) return stored.accessToken;
 
+  // On browser-session storage a refresh cannot be written back from here:
+  // only a route handler may set a cookie. Jobber rotates its refresh token,
+  // so refreshing without saving the replacement breaks the connection
+  // permanently. Say so, and let the caller redirect through the route that
+  // can save it.
+  if (backend() === "cookie") throw new TokenExpired();
+
   const refreshed = await refreshTokens(stored.refreshToken);
   await saveConnection(refreshed, stored.connectedAccount);
   return refreshed.access_token;
+}
+
+/**
+ * Refresh and persist, for callers that CAN write — the refresh route.
+ *
+ * Returns the account name carried through from the previous tokens, so a
+ * refresh does not quietly forget whose Jobber this is.
+ */
+export async function refreshAndSave(): Promise<void> {
+  const stored = await loadTokens("jobber");
+  if (!stored) throw new Error("Jobber is not connected.");
+  const refreshed = await refreshTokens(stored.refreshToken);
+  await saveConnection(refreshed, stored.connectedAccount);
 }
 
 /* ----------------------------------------------------------------- graphql */

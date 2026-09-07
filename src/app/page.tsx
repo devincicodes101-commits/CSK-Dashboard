@@ -3,6 +3,8 @@ import { PeriodNav } from "@/components/PeriodNav";
 import { SectionNav, type Section } from "@/components/SectionNav";
 import { computeWeek, count, money, percent } from "@/lib/week-metrics";
 import { syncWeek } from "@/lib/sync";
+import { TokenExpired } from "@/lib/token-store";
+import { redirect } from "next/navigation";
 import { Button } from "@/components/ui";
 import {
   type PeriodKind,
@@ -53,8 +55,10 @@ export default async function Dashboard({
     week?: string;
     month?: string;
     period?: string;
-    /** "1" pulls the week live from Jobber instead of reading a snapshot. */
+    /** "0" suppresses the live pull, for when Jobber is down. */
     fetch?: string;
+    /** Set by the refresh route, so an expiry cannot become a redirect loop. */
+    refreshed?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -85,6 +89,14 @@ export default async function Dashboard({
     try {
       live = await syncWeek(week);
     } catch (e) {
+      // An expired token cannot be renewed from here — only a route handler
+      // may write the replacement back. Bounce through the one that can and
+      // come straight back. `refreshed` stops that becoming a loop if the
+      // renewal itself is what is failing.
+      if (e instanceof TokenExpired && params.refreshed !== "1") {
+        const back = `/?week=${week.start}`;
+        redirect(`/api/jobber/refresh?next=${encodeURIComponent(back)}`);
+      }
       liveError = e instanceof Error ? e.message : String(e);
     }
   }

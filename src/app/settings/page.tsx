@@ -108,8 +108,12 @@ export default async function Settings({
                 </Correction>
                 <Correction>
                   {`Tokens are held in ${
-                    backend() === "supabase" ? "Supabase" : "server memory"
-                  }. Jobber rotates its refresh token on every use, so the new one has to be written back each time — which is why this cannot live in an environment variable.`}
+                    {
+                      supabase: "Supabase",
+                      cookie: "an encrypted cookie in your browser",
+                      memory: "server memory",
+                    }[backend()]
+                  }. Jobber rotates its refresh token on every use, so the replacement has to be written back each time — which is why this cannot live in an environment variable.`}
                 </Correction>
               </>
             }
