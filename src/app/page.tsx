@@ -271,16 +271,24 @@ export default async function Dashboard({
                       )}.`}
                     </Correction>
                   ) : null}
+                  {/* The specific comparison figures belong to the verified
+                      week and nowhere else. Quoting "29%" and "$3,675" on
+                      January's week said something simply untrue about
+                      January. Generic wording everywhere else. */}
                   <Correction>
-                    {`Jobber’s own screen reads ${percent(
-                      JOBBER_DISPLAYED.conversionRate,
-                      0,
-                    )} because it counts conversions only. CSK count approved change orders as won as well.`}
+                    {isSample
+                      ? `Jobber’s own screen reads ${percent(
+                          JOBBER_DISPLAYED.conversionRate,
+                          0,
+                        )} for this week because it counts conversions only. CSK count approved change orders as won as well.`
+                      : "Jobber’s own screen shows a lower rate, because it counts conversions only. CSK count approved change orders as won as well."}
                   </Correction>
                   <Correction>
-                    {`Values are pre-tax. Jobber’s card shows ${money(
-                      JOBBER_DISPLAYED.convertedValue,
-                    )} for converted quotes, which includes GST.`}
+                    {isSample
+                      ? `Values are pre-tax. Jobber’s card shows ${money(
+                          JOBBER_DISPLAYED.convertedValue,
+                        )} for converted quotes this week, which includes GST.`
+                      : "Values are pre-tax. Jobber’s summary cards include GST, about 5% higher in BC."}
                   </Correction>
                 </>
               }
@@ -317,17 +325,21 @@ export default async function Dashboard({
               note={
                 <>
                   <Correction>
-                    {`Gross profit is revenue less labour and materials, worked from the dollars. Jobber reports ${percent(
-                      JOBBER_DISPLAYED.averageProfitRate,
-                      0,
-                    )} for this week by averaging each job’s own percentage, which weights a ${money(
-                      250,
-                    )} job the same as a ${money(6563)} one.`}
+                    {isSample
+                      ? `Gross profit is revenue less labour and materials, worked from the dollars. Jobber reports ${percent(
+                          JOBBER_DISPLAYED.averageProfitRate,
+                          0,
+                        )} for this week by averaging each job’s own percentage, which weights a ${money(
+                          250,
+                        )} job the same as a ${money(6563)} one.`
+                      : "Gross profit is revenue less labour and materials, worked from the dollars. Jobber’s own profit percentage averages each job equally, so a small job counts as much as a large one."}
                   </Correction>
                   <Correction>
-                    {`Revenue is the sum of the ${metrics.jobsClosed} jobs closed. The summary card above that same table reads ${money(
-                      JOBBER_DISPLAYED.revenueCard,
-                    )}, counting a different set of jobs.`}
+                    {isSample
+                      ? `Revenue is the sum of the ${metrics.jobsClosed} jobs closed. The summary card above that same table reads ${money(
+                          JOBBER_DISPLAYED.revenueCard,
+                        )}, counting a different set of jobs.`
+                      : `Revenue is the sum of the ${metrics.jobsClosed} jobs closed in the week. Jobber’s summary cards count a different set of jobs and will not match.`}
                   </Correction>
                 </>
               }
