@@ -34,6 +34,7 @@ import {
   reconcile,
   sumJobs,
   sumSubtotals,
+  sumTotals,
   weekFromMonday,
   alsoWonEarlier,
 } from "../src/lib/metric-rules.ts";
@@ -131,6 +132,17 @@ close(
   conversionRate(sumSubtotals(quotesWon(QUOTES, WEEK)), SENT_VALUE),
   0.0313,
   0.0005,
+);
+
+// CSK take Quotes Sent ($) off Jobber's card, which includes GST, while the
+// won figures come from the Subtotal column. Inconsistent, and theirs.
+section("Quotes Sent ($) is tax inclusive, the won figures are not");
+close("won, pre-tax", sumSubtotals(quotesWon(QUOTES, WEEK)), 6442.47, 0.005);
+close("the same quotes with tax", sumTotals(quotesWon(QUOTES, WEEK)), 6764.59, 0.005);
+check(
+  "which is about five percent higher",
+  Math.round((sumTotals(quotesWon(QUOTES, WEEK)) / sumSubtotals(quotesWon(QUOTES, WEEK))) * 100) / 100,
+  1.05,
 );
 
 section("The wrong answers, which we must not produce");

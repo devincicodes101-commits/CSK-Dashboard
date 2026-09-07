@@ -21,6 +21,7 @@ import {
   rate,
   sumJobs,
   sumSubtotals,
+  sumTotals,
   // Explicit .ts extension: scripts/test-metrics.mts imports this file through
   // Node's ESM loader, which will not resolve an extensionless path.
 } from "./metric-rules.ts";
@@ -119,7 +120,8 @@ export function computeWeek(sources: WeekSources): ComputedWeek {
   // available.
   const sent = quotesSent(quotes, week);
   const sentCount = quotesAreComplete ? sent.length : cards.quotesSentCount;
-  const sentValue = quotesAreComplete ? sumSubtotals(sent) : cards.quotesSentValue;
+  // Tax inclusive, to match Jobber's Sent card. See sumTotals.
+  const sentValue = quotesAreComplete ? sumTotals(sent) : cards.quotesSentValue;
 
   if (quotesAreComplete && sent.length === 0 && won.length > 0) {
     problems.push({

@@ -40,7 +40,7 @@ import { saveWeek } from "./week-store.ts";
  * Raise it for anything that changes the numbers: a definition, a query, a
  * date boundary. Not for wording or layout.
  */
-export const SYNC_VERSION = 4;
+export const SYNC_VERSION = 5;
 
 export interface SyncResult {
   metrics: ComputedWeek;

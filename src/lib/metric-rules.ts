@@ -265,9 +265,26 @@ export function quotesSent(
 
 /* ------------------------------------------------------------------- money */
 
-/** Pre-tax total. The only way dollar values are ever summed. */
+/** Pre-tax. How every WON dollar figure is summed. */
 export function sumSubtotals(quotes: readonly Quote[]): number {
   return round2(quotes.reduce((sum, q) => sum + q.subtotal, 0));
+}
+
+/**
+ * Tax inclusive. Used for Quotes Sent ($) and nothing else.
+ *
+ * This is deliberately inconsistent with sumSubtotals, because CSK's own
+ * figures are. Kyle reads Quotes Sent ($) straight off Jobber's "Sent" card,
+ * which includes GST, while taking Converted and Approved from the Subtotal
+ * column, which does not. For 17-23 August that is $242,501 against $230,953
+ * — the same fourteen quotes, five percent apart.
+ *
+ * Reproducing his sheet means reproducing that. What it must not do is go
+ * unmentioned: Sent ($) and Won ($) are not on the same basis and should not
+ * be compared, which the dashboard says on the block.
+ */
+export function sumTotals(quotes: readonly Quote[]): number {
+  return round2(quotes.reduce((sum, q) => sum + q.total, 0));
 }
 
 export function sumJobs(jobs: readonly Job[]): {

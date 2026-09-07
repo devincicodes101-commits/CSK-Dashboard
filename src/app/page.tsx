@@ -307,6 +307,12 @@ export default async function Dashboard({
                       : "Jobber’s own screen shows a lower rate, because it counts conversions only. CSK count approved change orders as won as well."}
                   </Correction>
                   <Correction>
+                    Quotes Sent ($) matches Jobber&rsquo;s Sent card, which
+                    includes GST. The converted, approved and won figures are
+                    pre-tax, as CSK report them. The two are about 5% apart and
+                    are not directly comparable.
+                  </Correction>
+                  <Correction>
                     {isSample
                       ? `Values are pre-tax. Jobber’s card shows ${money(
                           JOBBER_DISPLAYED.convertedValue,
