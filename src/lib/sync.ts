@@ -25,6 +25,23 @@ import type { Problem } from "./types";
 import { type ComputedWeek, computeWeek } from "./week-metrics.ts";
 import { saveWeek } from "./week-store.ts";
 
+/**
+ * Bumped whenever a change would make a stored week wrong.
+ *
+ * A frozen week keeps whatever was true when it was fetched, which is the
+ * point — but it also keeps whatever was BROKEN when it was fetched. Weeks
+ * stored on 7 September carry null leads and no invoiced value because those
+ * queries did not exist yet, and boundaries seven hours out because they were
+ * bounded in UTC. They look finished and are not.
+ *
+ * The stamp lets the dashboard say so and offer to re-fetch, rather than
+ * silently serving a stale figure that nobody can tell apart from a fresh one.
+ *
+ * Raise it for anything that changes the numbers: a definition, a query, a
+ * date boundary. Not for wording or layout.
+ */
+export const SYNC_VERSION = 3;
+
 export interface SyncResult {
   metrics: ComputedWeek;
   /** How many records were involved, for the "where did this come from" line. */
@@ -124,7 +141,11 @@ export async function syncWeek(week: {
   // Freeze it. Storing the records alongside the figures means a definition
   // change can be replayed over history without going back to Jobber, which
   // matters while the cross-week counting rule is still unconfirmed.
-  await saveWeek(result, { quotes, jobs: jobs.map((m) => m.job) });
+  await saveWeek(result, {
+    syncVersion: SYNC_VERSION,
+    quotes,
+    jobs: jobs.map((m) => m.job),
+  });
 
   return {
     metrics: result,

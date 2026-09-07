@@ -2,7 +2,7 @@ import { Block, Correction, EmptyBlock, Metric, Metrics, Pill } from "@/componen
 import { PeriodNav } from "@/components/PeriodNav";
 import { SectionNav, type Section } from "@/components/SectionNav";
 import { computeWeek, count, money, percent } from "@/lib/week-metrics";
-import { syncWeek } from "@/lib/sync";
+import { SYNC_VERSION, syncWeek } from "@/lib/sync";
 import { loadWeek, syncedWeeks } from "@/lib/week-store";
 import { TokenExpired } from "@/lib/token-store";
 import { redirect } from "next/navigation";
@@ -57,6 +57,8 @@ export default async function Dashboard({
     fetch?: string;
     /** Set by the refresh route, so an expiry cannot become a redirect loop. */
     refreshed?: string;
+    /** "1" re-fetches a week that is already stored, replacing it. */
+    resync?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -67,8 +69,20 @@ export default async function Dashboard({
 
   // A stored week always wins. It was computed once, after the data settled,
   // and re-fetching it would both drift and burn Jobber's rate limit.
-  const stored = kind === "weekly" ? await loadWeek(week.start).catch(() => null) : null;
+  const found = kind === "weekly" ? await loadWeek(week.start).catch(() => null) : null;
   const storedWeeks = await syncedWeeks();
+
+  /**
+   * A stored week computed by an older version is stale, not finished.
+   *
+   * Weeks frozen before the requests, invoices and clients queries existed
+   * carry nulls where figures belong, and weeks frozen before the timezone
+   * fix have boundaries seven hours out. Both look exactly like a complete
+   * week, which is the problem.
+   */
+  const isStale = Boolean(found && found.syncVersion < SYNC_VERSION);
+  const resyncing = params.resync === "1";
+  const stored = resyncing ? null : found;
 
   const isSample =
     !stored && kind === "weekly" && week.start === VERIFIED_WEEK_MONDAY;
@@ -167,7 +181,9 @@ export default async function Dashboard({
 
           {stored ? (
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              <Pill tone="good">Stored</Pill>
+              <Pill tone={isStale ? "warn" : "good"}>
+                {isStale ? "Stored · out of date" : "Stored"}
+              </Pill>
               <p className="font-mono text-[11px] text-ink-4">
                 {`fetched ${new Date(stored.syncedAt).toLocaleDateString("en-CA", {
                   day: "numeric",
@@ -175,6 +191,14 @@ export default async function Dashboard({
                   year: "numeric",
                 })}`}
               </p>
+              {isStale ? (
+                <a
+                  href={`/?week=${week.start}&resync=1`}
+                  className="micro cursor-pointer rounded-full border border-accent-soft px-3 py-1.5 text-accent transition-colors duration-200 hover:bg-accent-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  Re-fetch
+                </a>
+              ) : null}
             </div>
           ) : live ? (
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -364,6 +388,14 @@ export default async function Dashboard({
             </Block>
           </div>
         )}
+
+        {stored && isStale ? (
+          <p className="mt-6 rounded-lg border border-warn/40 bg-warn-tint px-5 py-4 font-mono text-[11px] leading-relaxed text-warn">
+            This week was fetched before some of its figures could be
+            calculated, and before week boundaries were corrected to CSK&rsquo;s
+            timezone. Re-fetch it to fill the gaps and fix the edges.
+          </p>
+        ) : null}
 
         {metrics && metrics.problems.length > 0 ? (
           <section className="mt-10 border-t border-line pt-6">

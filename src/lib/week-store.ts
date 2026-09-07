@@ -21,6 +21,11 @@ export interface StoredWeek {
   metrics: ComputedWeek;
   syncedAt: string;
   status: "draft" | "final";
+  /**
+   * Which version of the sync produced this. 0 for weeks stored before the
+   * stamp existed, which is exactly the set that needs re-fetching.
+   */
+  syncVersion: number;
 }
 
 function available(): boolean {
@@ -63,6 +68,7 @@ export async function loadWeek(weekStart: string): Promise<StoredWeek | null> {
   return {
     syncedAt: data.synced_at as string,
     status: data.status as "draft" | "final",
+    syncVersion: Number((data.raw as { syncVersion?: number })?.syncVersion ?? 0),
     metrics: {
       week: { start: data.week_start as string, end: data.week_end as string },
 
