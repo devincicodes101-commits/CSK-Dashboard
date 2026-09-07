@@ -194,13 +194,25 @@ export default async function Settings({
           </Block>
         </div>
 
-        <footer className="mt-12 flex flex-wrap gap-5 border-t border-line pt-6">
-          <a href="/privacy" className="micro cursor-pointer text-ink-4 transition-colors duration-200 hover:text-accent">
-            Privacy policy
-          </a>
-          <a href="/terms" className="micro cursor-pointer text-ink-4 transition-colors duration-200 hover:text-accent">
-            Terms of use
-          </a>
+        <footer className="mt-12 border-t border-line pt-6">
+          <p className="mb-4 max-w-xl font-mono text-[11px] leading-relaxed text-ink-3">
+            {/* Intuit's questionnaire asks whether customers can reach support
+                from inside the app. They can now. */}
+            Something wrong with a figure, or a connection that won&rsquo;t
+            hold? Contact DeVinci Codes at the address on the CSK engagement,
+            quoting the week shown on the dashboard.
+          </p>
+          <div className="flex flex-wrap gap-5">
+            <a href="/privacy" className="micro cursor-pointer text-ink-4 transition-colors duration-200 hover:text-accent">
+              Privacy policy
+            </a>
+            <a href="/terms" className="micro cursor-pointer text-ink-4 transition-colors duration-200 hover:text-accent">
+              Terms of use
+            </a>
+            <a href="/api/auth" className="micro cursor-pointer text-ink-4 transition-colors duration-200 hover:text-accent">
+              Sign out
+            </a>
+          </div>
         </footer>
       </main>
     </div>

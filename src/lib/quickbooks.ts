@@ -145,6 +145,37 @@ export async function realmId(): Promise<string> {
   return realm;
 }
 
+/**
+ * A QuickBooks API call, with Intuit's trace id kept on any failure.
+ *
+ * Every Intuit response carries an `intuit_tid` header identifying that exact
+ * request in their systems. It is the first thing their support asks for, and
+ * it is unrecoverable once the response is discarded — so it goes into the
+ * error rather than being noticed as missing during an incident.
+ */
+export async function qboFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const url = `${apiBase()}/v3/company/${await realmId()}/${path}`;
+
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      ...init.headers,
+      Authorization: `Bearer ${await accessToken()}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const tid = response.headers.get("intuit_tid") ?? "none";
+    throw new Error(
+      `QuickBooks returned ${response.status} for ${path} ` +
+        `(intuit_tid ${tid}): ${await response.text()}`,
+    );
+  }
+
+  return response;
+}
+
 function env(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is not set.`);
