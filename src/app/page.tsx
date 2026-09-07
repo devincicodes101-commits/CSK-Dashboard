@@ -300,26 +300,40 @@ export default async function Dashboard({
                 </>
               }
             >
-              {/* Labels are the client's own row names from the Weekly tab,
-                  verbatim. Chase reads these next to the spreadsheet he has
-                  used for years; a tidier wording would just make him check
-                  whether it means the same thing. That includes the American
-                  "Labor" and the lower-case w in "Total Quotes won ($)". */}
+              {/* Seven metrics, matching the Definitions tab — the client's
+                  own dictionary, which pairs the count and the dollar value
+                  into one row: "Quotes Converted (#/$)". The Weekly tab splits
+                  them across ten rows so Kyle has a cell to type each into;
+                  that is a data-entry layout, not the metric list.
+
+                  Names are verbatim, including the American "Labor" and the
+                  lower-case w in "Quotes Won $". Chase reads this beside a
+                  spreadsheet he has used for years, and a tidier wording only
+                  makes him stop to check whether it means the same thing. */}
               <Metrics>
                 <Metric label="New Leads" value={count(metrics.newLeads)} />
                 <Metric label="Quotes Sent" value={count(metrics.quotesSentCount)} />
-                <Metric label="Quotes Converted (#)" value={count(metrics.convertedCount)} />
-                <Metric label="Quotes Approved (#)" value={count(metrics.approvedCount)} />
+                <Metric
+                  label="Quotes Converted (#/$)"
+                  value={count(metrics.convertedCount)}
+                  hint={money(metrics.convertedValue)}
+                />
+                <Metric
+                  label="Quotes Approved (#/$)"
+                  value={count(metrics.approvedCount)}
+                  hint={money(metrics.approvedValue)}
+                />
                 <Metric label="Total Quotes Won (#)" value={count(metrics.wonCount)} />
                 <Metric
                   label="Quote Conversion %"
                   value={percent(metrics.conversionRate)}
                   tone="good"
                 />
-                <Metric label="Quotes Converted ($)" value={money(metrics.convertedValue)} />
-                <Metric label="Quotes Approved ($)" value={money(metrics.approvedValue)} />
-                <Metric label="Total Quotes won ($)" value={money(metrics.wonValue)} />
-                <Metric label="Quotes Sent ($)" value={money(metrics.quotesSentValue)} />
+                <Metric
+                  label="Quotes Won $ (+ Sent $)"
+                  value={money(metrics.wonValue)}
+                  hint={`${money(metrics.quotesSentValue)} sent`}
+                />
               </Metrics>
             </Block>
 
@@ -363,20 +377,11 @@ export default async function Dashboard({
                 />
                 <Metric label="Labor Cost ($)" value={money(metrics.labourCost)} />
                 <Metric label="Material Cost ($)" value={money(metrics.materialCost)} />
-                <Metric label="Gross Profit ($)" value={money(metrics.grossProfit)} />
                 <Metric
-                  label="Gross Profit %"
-                  value={percent(metrics.grossProfitRate)}
+                  label="Gross Profit ($ / %)"
+                  value={money(metrics.grossProfit)}
+                  hint={percent(metrics.grossProfitRate)}
                   tone="good"
-                />
-                {/* Not on the client's Weekly tab — it lives on Monthly, where
-                    it feeds Labour Efficiency. Shown here because it is free
-                    once the jobs are fetched and it is the one Jobber sum
-                    their own Read Me says can be trusted. */}
-                <Metric
-                  label="Time Tracked (hrs)"
-                  value={metrics.timeTrackedHours.toFixed(1)}
-                  tone="muted"
                 />
               </Metrics>
             </Block>
@@ -395,15 +400,27 @@ export default async function Dashboard({
                 </Correction>
               }
             >
-              {/* Named and shown rather than hidden behind an empty state, so
-                  the client can see all five of their rows are accounted for
-                  and simply waiting on QuickBooks. */}
+              {/* Three, as the Definitions tab lists them. AR — Total and AR
+                  Over 30 Days ($) appear on the Weekly tab as the two figures
+                  Kyle types in to get the percentage; they are inputs, not
+                  metrics, so the percentage is what is shown. */}
               <Metrics>
-                <Metric label="Cash Balance ($)" value={money(metrics.cashBalance)} tone="muted" />
-                <Metric label="AR — Total ($)" value={money(metrics.arTotal)} tone="muted" />
-                <Metric label="AR Over 30 Days ($)" value={money(metrics.arOver30)} tone="muted" />
-                <Metric label="AR Over 30 Days (%)" value={percent(metrics.arOver30Rate)} tone="muted" />
-                <Metric label="Invoices Over 30 Days (#)" value={count(metrics.invoicesOver30)} tone="muted" />
+                <Metric
+                  label="Cash Balance ($)"
+                  value={money(metrics.cashBalance)}
+                  tone="muted"
+                />
+                <Metric
+                  label="AR Over 30 Days (%)"
+                  value={percent(metrics.arOver30Rate)}
+                  hint={`${money(metrics.arOver30)} of ${money(metrics.arTotal)}`}
+                  tone="muted"
+                />
+                <Metric
+                  label="Invoices Over 30 Days (#)"
+                  value={count(metrics.invoicesOver30)}
+                  tone="muted"
+                />
               </Metrics>
             </Block>
           </div>
