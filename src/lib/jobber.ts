@@ -34,6 +34,17 @@ export function authorizeUrl(state: string): string {
   return `${JOBBER_AUTHORIZE_URL}?${params}`;
 }
 
+/** The stored refresh token has been spent. Only reconnecting fixes it. */
+export class ConnectionLost extends Error {
+  constructor() {
+    super(
+      "The Jobber connection has expired. Open Settings and click Reconnect — " +
+        "it takes a few seconds and nothing else needs changing.",
+    );
+    this.name = "ConnectionLost";
+  }
+}
+
 interface TokenResponse {
   access_token: string;
   refresh_token: string;
@@ -69,11 +80,21 @@ async function tokenRequest(fields: Record<string, string>): Promise<TokenRespon
   });
 
   if (!response.ok) {
-    // The body carries the real reason — almost always a redirect_uri that
-    // does not match the one registered on the app, down to a trailing slash.
-    throw new Error(
-      `Jobber token request failed (${response.status}): ${await response.text()}`,
-    );
+    const body = await response.text();
+
+    // A 401 on a refresh is not a transient failure. Jobber rotates its
+    // refresh token on every use, so a rejected one means the stored token
+    // has already been spent and no retry will help — the connection has to
+    // be made again. Say that, rather than showing the raw 401 to someone who
+    // then has no idea what to do about it.
+    if (response.status === 401 && fields.grant_type === "refresh_token") {
+      throw new ConnectionLost();
+    }
+
+    // Otherwise the body carries the real reason — almost always a
+    // redirect_uri that does not match the one registered on the app, down to
+    // a trailing slash.
+    throw new Error(`Jobber token request failed (${response.status}): ${body}`);
   }
   return (await response.json()) as TokenResponse;
 }
@@ -93,18 +114,21 @@ export async function saveConnection(
 }
 
 /**
- * A usable access token, refreshing first if it is close to expiry.
+ * At most one refresh in flight at a time.
  *
- * Refreshed a minute early on purpose: a token that expires mid-sync fails
- * halfway through a week and leaves a partial snapshot, which is worse than
- * refreshing slightly too often.
+ * syncWeek fires five queries in parallel and each asks for a token. With an
+ * expired token that meant five simultaneous refreshes using the same refresh
+ * token — Jobber accepts the first and rejects the rest, and in the scramble
+ * the surviving token can fail to be saved, which kills the connection
+ * outright and needs a manual reconnect.
  *
- * Jobber has refresh token rotation switched on, so each refresh invalidates
- * the one it replaced. That has a consequence worth remembering before adding
- * a manual "sync now" button: two refreshes racing each other will break the
- * connection outright, because the loser is holding a token that no longer
- * exists. One scheduled job is safe; two concurrent callers are not.
+ * Callers arriving while a refresh is running wait for that one instead of
+ * starting their own. Module scope, so this covers one serverless instance;
+ * two instances refreshing at the same moment is far rarer and no longer the
+ * common case.
  */
+let refreshInFlight: Promise<string> | null = null;
+
 export async function accessToken(): Promise<string> {
   const stored = await loadTokens("jobber");
   if (!stored) {
@@ -122,9 +146,21 @@ export async function accessToken(): Promise<string> {
   // can save it.
   if (backend() === "cookie") throw new TokenExpired();
 
-  const refreshed = await refreshTokens(stored.refreshToken);
-  await saveConnection(refreshed, stored.connectedAccount);
-  return refreshed.access_token;
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const refreshed = await refreshTokens(stored.refreshToken);
+        // Save BEFORE returning. A token handed out but not stored is the
+        // failure that ends with a dead connection.
+        await saveConnection(refreshed, stored.connectedAccount);
+        return refreshed.access_token;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+
+  return refreshInFlight;
 }
 
 /**

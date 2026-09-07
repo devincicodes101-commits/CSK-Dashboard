@@ -196,6 +196,14 @@ export default async function Dashboard({
                   year: "numeric",
                 })}`}
               </p>
+              {servingStale && liveError?.includes("Reconnect") ? (
+                <a
+                  href="/api/jobber/connect"
+                  className="micro cursor-pointer rounded-full bg-accent px-4 py-2 text-ground transition-colors duration-200 hover:bg-[#e0a463] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  Reconnect Jobber
+                </a>
+              ) : null}
               {servingStale && liveError ? (
                 <p className="max-w-md font-mono text-[11px] leading-relaxed text-warn">
                   {/* Was only in a banner below the blocks, where someone
