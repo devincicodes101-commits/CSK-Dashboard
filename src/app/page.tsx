@@ -178,12 +178,16 @@ export default async function Dashboard({
             </div>
           ) : live ? (
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              {/* Live and stored must never look alike. A stored week is
-                  frozen and will read the same forever; this one is whatever
-                  Jobber says right now, and is not saved. */}
-              <Pill tone="accent">Live from Jobber &middot; not saved</Pill>
+              {/* It IS saved — syncWeek writes the snapshot before returning.
+                  This said "not saved", which was true before there was a
+                  database and false the moment there was one. */}
+              <Pill tone="good">Fetched just now</Pill>
               <p className="font-mono text-[11px] text-ink-4">
-                {`${live.counts.quotes} quotes, ${live.counts.jobs} jobs`}
+                {/* "506 quotes" read as though the week had 506 of them. The
+                    quotes query has no upper bound on updatedAt by design, so
+                    it scans everything touched since the week began and the
+                    date rules narrow it. Say scanned, not counted. */}
+                {`${live.counts.jobs} jobs closed · ${live.counts.quotes} quotes scanned`}
               </p>
             </div>
           ) : hasFigures ? (
