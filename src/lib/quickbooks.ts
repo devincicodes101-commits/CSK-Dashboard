@@ -1,0 +1,152 @@
+/**
+ * Talking to QuickBooks Online.
+ *
+ * Two differences from Jobber worth knowing before reading further.
+ *
+ * QBO identifies the company with a `realmId` that arrives on the callback
+ * rather than being implied by the token, and every API call needs it. Lose
+ * it and the tokens are useless, which is why oauth_connections has a column
+ * for it.
+ *
+ * And its refresh tokens rotate too, but with a hard limit: a refresh token
+ * lasts about 100 days and every refresh issues a new one. If nothing calls
+ * the API for 100 days the connection dies of old age, no matter how healthy
+ * it looked. The weekly sync keeps it alive on its own; a long quiet period
+ * would not.
+ *
+ * Endpoints below are the documented ones. Confirm them against Intuit's
+ * current docs before the first production connection — the same discipline
+ * that caught the Jobber header being X-JOBBER-GRAPHQL-VERSION.
+ */
+
+import { loadTokens, saveTokens } from "./token-store";
+
+export const QBO_AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
+export const QBO_TOKEN_URL =
+  "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
+
+/** Read-only accounting. Deliberately not the payments scope. */
+export const QBO_SCOPE = "com.intuit.quickbooks.accounting";
+
+export function apiBase(): string {
+  return process.env.QBO_ENVIRONMENT?.trim() === "production"
+    ? "https://quickbooks.api.intuit.com"
+    : "https://sandbox-quickbooks.api.intuit.com";
+}
+
+export function authorizeUrl(state: string): string {
+  const params = new URLSearchParams({
+    client_id: env("QBO_CLIENT_ID"),
+    scope: QBO_SCOPE,
+    redirect_uri: env("QBO_REDIRECT_URI"),
+    response_type: "code",
+    state,
+  });
+  return `${QBO_AUTHORIZE_URL}?${params}`;
+}
+
+interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+}
+
+/** Intuit wants the client credentials as Basic auth, not form fields. */
+function basicAuth(): string {
+  const pair = `${env("QBO_CLIENT_ID")}:${env("QBO_CLIENT_SECRET")}`;
+  return `Basic ${Buffer.from(pair).toString("base64")}`;
+}
+
+async function tokenRequest(fields: Record<string, string>): Promise<TokenResponse> {
+  const response = await fetch(QBO_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      Authorization: basicAuth(),
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams(fields),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `QuickBooks token request failed (${response.status}): ${await response.text()}`,
+    );
+  }
+  return (await response.json()) as TokenResponse;
+}
+
+export async function exchangeCode(code: string): Promise<TokenResponse> {
+  return tokenRequest({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: env("QBO_REDIRECT_URI"),
+  });
+}
+
+export async function saveConnection(
+  tokens: TokenResponse,
+  realmId: string,
+): Promise<void> {
+  await saveTokens("quickbooks", {
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token,
+    expiresAt: Date.now() + tokens.expires_in * 1000,
+    // The realm is the company. Stored in connectedAccount so it survives
+    // alongside the tokens; without it the tokens address nothing.
+    connectedAccount: realmId,
+  });
+}
+
+/**
+ * A usable access token, refreshing if needed. Serialised, for the same
+ * reason as Jobber's: parallel refreshes with a rotating token kill the
+ * connection outright.
+ */
+let refreshInFlight: Promise<string> | null = null;
+
+export async function accessToken(): Promise<string> {
+  const stored = await loadTokens("quickbooks");
+  if (!stored) {
+    throw new Error(
+      "QuickBooks is not connected. Open Settings and connect it first.",
+    );
+  }
+
+  if (stored.expiresAt - Date.now() > 60_000) return stored.accessToken;
+
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const refreshed = await tokenRequest({
+          grant_type: "refresh_token",
+          refresh_token: stored.refreshToken,
+        });
+        await saveConnection(refreshed, stored.connectedAccount ?? "");
+        return refreshed.access_token;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+  return refreshInFlight;
+}
+
+/** The connected company id, needed on every request path. */
+export async function realmId(): Promise<string> {
+  const stored = await loadTokens("quickbooks");
+  const realm = stored?.connectedAccount;
+  if (!realm) {
+    throw new Error(
+      "No QuickBooks company id is stored. Reconnect QuickBooks — the id " +
+        "arrives with the connection and the API cannot be called without it.",
+    );
+  }
+  return realm;
+}
+
+function env(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is not set.`);
+  return value;
+}

@@ -18,9 +18,11 @@ export default async function Settings({
   // Never let a failure to read the store render as "not connected" — that
   // sends someone off to reconnect a connection that was fine.
   let jobber: Awaited<ReturnType<typeof loadTokens>> = null;
+  let quickbooks: Awaited<ReturnType<typeof loadTokens>> = null;
   let storeError: string | null = null;
   try {
     jobber = await loadTokens("jobber");
+    quickbooks = await loadTokens("quickbooks");
   } catch (e) {
     storeError = e instanceof Error ? e.message : String(e);
   }
@@ -156,15 +158,50 @@ export default async function Settings({
             title="QuickBooks"
             audience="Bank balance, unpaid invoices"
             note={
-              <Correction>
-                Not built yet. Cash &amp; AR stays empty until this is connected
-                and its figures have been checked against a real export.
-              </Correction>
+              <>
+                <Correction>
+                  Read-only accounting scope. The app holds no payments scope
+                  and cannot move money or alter a ledger.
+                </Correction>
+                <Correction>
+                  QuickBooks refresh tokens expire after about 100 days, and
+                  every use issues a new one. The weekly sync keeps the
+                  connection alive on its own; a long quiet period would not.
+                </Correction>
+              </>
             }
           >
-            <Pill tone="muted">Not started</Pill>
+            <div className="flex flex-wrap items-center gap-4">
+              {quickbooks ? (
+                <>
+                  <Pill tone="good">Connected</Pill>
+                  {quickbooks.connectedAccount ? (
+                    <p className="font-mono text-[11px] text-ink-2">
+                      {`company ${quickbooks.connectedAccount}`}
+                    </p>
+                  ) : null}
+                  <Button href="/api/quickbooks/connect" variant="ghost">
+                    Reconnect
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Pill tone="warn">Not connected</Pill>
+                  <Button href="/api/quickbooks/connect">Connect QuickBooks</Button>
+                </>
+              )}
+            </div>
           </Block>
         </div>
+
+        <footer className="mt-12 flex flex-wrap gap-5 border-t border-line pt-6">
+          <a href="/privacy" className="micro cursor-pointer text-ink-4 transition-colors duration-200 hover:text-accent">
+            Privacy policy
+          </a>
+          <a href="/terms" className="micro cursor-pointer text-ink-4 transition-colors duration-200 hover:text-accent">
+            Terms of use
+          </a>
+        </footer>
       </main>
     </div>
   );
