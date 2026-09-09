@@ -91,8 +91,12 @@ export const VERIFIED_CARDS = {
   newRequests: 22,
   quotesSentCount: 7,
   quotesSentValue: 206046,
-  /** Shown rounded on screen as "$12.8k", so treat as approximate. */
-  invoicedValue: 12800,
+  /**
+   * Tax-inclusive, off Jobber's Invoices screen for the week: five invoices,
+   * $12,760.21. Kyle's sheet rounds it to $12.8k. The pre-tax subtotal is
+   * $12,152.58 — the same invoices less 5% GST — and is NOT what CSK report.
+   */
+  invoicedValue: 12760.21,
 } as const;
 
 /** What Jobber displayed for the same week, kept so the app can show both. */

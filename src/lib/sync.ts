@@ -41,7 +41,7 @@ import { fetchAr, fetchCashBalance } from "./quickbooks-queries.ts";
  * Raise it for anything that changes the numbers: a definition, a query, a
  * date boundary. Not for wording or layout.
  */
-export const SYNC_VERSION = 7;
+export const SYNC_VERSION = 8;
 
 export interface SyncResult {
   metrics: ComputedWeek;

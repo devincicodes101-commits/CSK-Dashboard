@@ -340,7 +340,20 @@ interface RawInvoice {
   amounts: { subtotal: number; total: number } | null;
 }
 
-/** Pre-tax, like every other dollar figure on this dashboard. */
+/**
+ * TAX-INCLUSIVE, deliberately — one of two figures on this dashboard that are.
+ *
+ * Every other dollar here is a pre-tax subtotal. This one is not, because
+ * Jobber's Invoices screen shows the tax-inclusive total and that is the
+ * number Kyle put in the spreadsheet. For 3-9 August the screen read
+ * $12,760.21 across five invoices; the subtotals came to $12,152.58, which is
+ * the same money less 5% GST.
+ *
+ * Matching the client's sheet beats internal consistency here. The report has
+ * to be recognisable to the person who has been building it by hand, and a
+ * figure that is $600 short every week would not be. Quotes Sent ($) is the
+ * other one, for the same reason.
+ */
 export async function fetchInvoicedValue(
   weekStart: string,
   weekEnd: string,
@@ -351,7 +364,7 @@ export async function fetchInvoicedValue(
   );
 
   return {
-    value: round2(nodes.reduce((sum, i) => sum + (i.amounts?.subtotal ?? 0), 0)),
+    value: round2(nodes.reduce((sum, i) => sum + (i.amounts?.total ?? 0), 0)),
     count: nodes.length,
   };
 }
