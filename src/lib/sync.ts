@@ -11,7 +11,7 @@
  * from the cron would be the worst kind of bug: rare, and invisible.
  */
 
-import { type Quote } from "./metric-rules.ts";
+import { type Quote, quotesWon } from "./metric-rules.ts";
 import {
   fetchInvoicedValue,
   fetchNewClients,
@@ -78,6 +78,24 @@ export async function syncWeek(week: {
   ]).catch((error: unknown) => error as Error);
 
   const [sent, possiblyWon, jobs, requests, newClients] = await jobberWork;
+
+  // A week with jobs finished and quotes won, but no quotes sent at all, is
+  // not a quiet week — it is a broken query. Jobber's sentAt filter returns an
+  // empty list rather than an error under API version 2026-05-12 (see
+  // JOBBER_API_VERSION), and an empty list divides into a 0% win rate that
+  // looks entirely believable. Say so instead.
+  const wonThisWeek = quotesWon(possiblyWon, week).length;
+  if (sent.length === 0 && (wonThisWeek > 0 || jobs.length > 0)) {
+    problems.push({
+      where: "Quotes sent",
+      message:
+        `Jobber returned no quotes sent this week, yet ${wonThisWeek} were won ` +
+        `and ${jobs.length} jobs closed. A quote cannot be won without being ` +
+        "sent, so the figure is wrong rather than low — most likely the sentAt " +
+        "filter. Win rate is not reported for this week.",
+      severity: "error",
+    });
+  }
 
   // Invoices separately, and allowed to fail. InvoiceAmounts' field names are
   // assumed rather than confirmed, and one uncertain metric must not take the

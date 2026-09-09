@@ -20,6 +20,20 @@ export const JOBBER_GRAPHQL_URL = "https://api.getjobber.com/api/graphql";
  * which is also where the exact header name came from — it is
  * X-JOBBER-GRAPHQL-VERSION, not the run-together spelling.
  */
+/**
+ * DO NOT BUMP THIS WITHOUT RE-RUNNING scripts/test-metrics.mts AGAINST LIVE DATA.
+ *
+ * Confirmed on 9 September 2026, against CSK's own account: under version
+ * 2026-05-12 the `sentAt` quote filter returns NOTHING. Not an error — an
+ * empty list. Asked for every quote sent since 2020 it answered zero, on an
+ * account holding 1,057 quotes whose sentAt fields are plainly populated.
+ * Under 2025-04-16 the same query returns the expected quotes.
+ *
+ * So a version bump would have taken Quotes Sent to 0, and with it the win
+ * rate, silently and plausibly. That is the exact failure this dashboard
+ * exists to prevent, which is why the version is pinned rather than tracking
+ * whatever Jobber ships. syncWeek carries a matching coherence check.
+ */
 export const JOBBER_API_VERSION = "2025-04-16";
 
 /* ------------------------------------------------------------------- oauth */
