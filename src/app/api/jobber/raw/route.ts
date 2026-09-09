@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { fetchQuotesSent, fetchQuotesPossiblyWon } from "@/lib/jobber-queries";
+import { graphql } from "@/lib/jobber";
 import { weekFromMonday, within, type Quote } from "@/lib/metric-rules";
 
 /**
@@ -31,11 +32,39 @@ const row = (q: Quote) => ({
   convertedAt: q.convertedAt,
 });
 
+/**
+ * What Jobber will actually let us ask for.
+ *
+ * Jobber's own Quotes screen filters on `lastSentAt` — a quote re-sent inside
+ * the week counts there even if it was first sent months earlier. Our query
+ * filters on `sentAt` and therefore misses it, which is the likeliest reason
+ * the dashboard shows 6 where the screen shows 7.
+ *
+ * Whether that is a one-word fix or a client-side one depends on whether the
+ * filter accepts lastSentAt, and whether the Quote type even exposes it. Both
+ * are questions only the schema can answer, so it is asked rather than
+ * assumed — the same discipline that found the QuickBooks cash bug.
+ */
+const SCHEMA = `
+  query QuoteSchema {
+    filter: __type(name: "QuoteFilterAttributes") { inputFields { name } }
+    quote: __type(name: "Quote") { fields { name } }
+  }
+`;
+
 export async function GET(request: NextRequest) {
   const monday = request.nextUrl.searchParams.get("week") ?? "2026-08-03";
 
   try {
     const week = weekFromMonday(monday);
+
+    const schema = (await graphql(SCHEMA, {})) as {
+      filter: { inputFields: { name: string }[] } | null;
+      quote: { fields: { name: string }[] } | null;
+    };
+    const filterFields = (schema.filter?.inputFields ?? []).map((f) => f.name);
+    const quoteFields = (schema.quote?.fields ?? []).map((f) => f.name);
+
     const sent = await fetchQuotesSent(week.start, week.end);
     const candidates = await fetchQuotesPossiblyWon(week.start);
 
@@ -51,6 +80,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       week: { start: week.start, end: week.end },
+      // The answer to "can we match Kyle's screen exactly, and how".
+      canFilterOnLastSent: filterFields.includes("lastSentAt"),
+      quoteExposesLastSent: quoteFields.some((f) => /lastSent/i.test(f)),
+      schema: { quoteFilterAccepts: filterFields, quoteHasFields: quoteFields },
       sent: {
         count: sent.length,
         subtotalSum: sent.reduce((s, q) => s + q.subtotal, 0),
