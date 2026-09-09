@@ -11,7 +11,7 @@
  * from the cron would be the worst kind of bug: rare, and invisible.
  */
 
-import { type Quote, quotesWon } from "./metric-rules.ts";
+import { type Quote, quotesWon, within } from "./metric-rules.ts";
 import {
   fetchInvoicedValue,
   fetchNewClients,
@@ -41,7 +41,7 @@ import { fetchAr, fetchCashBalance } from "./quickbooks-queries.ts";
  * Raise it for anything that changes the numbers: a definition, a query, a
  * date boundary. Not for wording or layout.
  */
-export const SYNC_VERSION = 8;
+export const SYNC_VERSION = 9;
 
 export interface SyncResult {
   metrics: ComputedWeek;
@@ -55,9 +55,10 @@ export async function syncWeek(week: {
 }): Promise<SyncResult> {
   const problems: Problem[] = [];
 
-  // Two queries, because Jobber will filter on sentAt but not on the dates a
-  // quote was actually won. See QUOTES_TRANSITIONED for why the second one has
-  // no upper bound.
+  // Two quote queries. The second one carries the week on its own: Jobber's
+  // sentAt filter is broken and returns an empty list (see sentThisWeek), so
+  // the unbounded updatedAt sweep is what actually finds the quotes. The first
+  // is kept in case Jobber fixes the filter.
   // Everything Jobber needs, and everything QuickBooks needs, started
   // together. They are separate systems with separate rate limits, and
   // running them in sequence doubled the wait on a week nobody had opened
@@ -79,23 +80,6 @@ export async function syncWeek(week: {
 
   const [sent, possiblyWon, jobs, requests, newClients] = await jobberWork;
 
-  // A week with jobs finished and quotes won, but no quotes sent at all, is
-  // not a quiet week — it is a broken query. Jobber's sentAt filter returns an
-  // empty list rather than an error under API version 2026-05-12 (see
-  // JOBBER_API_VERSION), and an empty list divides into a 0% win rate that
-  // looks entirely believable. Say so instead.
-  const wonThisWeek = quotesWon(possiblyWon, week).length;
-  if (sent.length === 0 && (wonThisWeek > 0 || jobs.length > 0)) {
-    problems.push({
-      where: "Quotes sent",
-      message:
-        `Jobber returned no quotes sent this week, yet ${wonThisWeek} were won ` +
-        `and ${jobs.length} jobs closed. A quote cannot be won without being ` +
-        "sent, so the figure is wrong rather than low — most likely the sentAt " +
-        "filter. Win rate is not reported for this week.",
-      severity: "error",
-    });
-  }
 
   // Invoices separately, and allowed to fail. InvoiceAmounts' field names are
   // assumed rather than confirmed, and one uncertain metric must not take the
@@ -169,6 +153,38 @@ export async function syncWeek(week: {
   }
   const quotes = [...byNumber.values()];
 
+  /**
+   * Quotes sent, counted from the records rather than from Jobber's filter.
+   *
+   * fetchQuotesSent is now expected to return nothing. Jobber's sentAt FILTER
+   * is broken — it answers an empty list, not an error, even asked for every
+   * quote since 2020 — while the sentAt FIELD on each quote is perfectly
+   * populated. So the filter is no longer trusted for anything.
+   *
+   * It does not need to be. The possiblyWon sweep sorts on updatedAt, which
+   * does work, and a quote sent during the week was necessarily updated during
+   * the week — so every quote sent is already in that set. The sent fetch is
+   * kept only as a belt-and-braces union in case the filter starts working
+   * again.
+   *
+   * A week with jobs closed and quotes won but none sent is impossible: a
+   * quote cannot be won without being sent. That means the sweep failed, and
+   * a zero denominator would render as a believable 0% win rate.
+   */
+  const sentThisWeek = quotes.filter((q) => within(q.sentAt, week)).length;
+  const wonThisWeek = quotesWon(quotes, week).length;
+
+  if (sentThisWeek === 0 && (wonThisWeek > 0 || jobs.length > 0)) {
+    problems.push({
+      where: "Quotes sent",
+      message:
+        `No quotes were found sent this week, yet ${wonThisWeek} were won and ` +
+        `${jobs.length} jobs closed. A quote cannot be won without being sent, ` +
+        "so this figure is wrong rather than low. Win rate is not reported.",
+      severity: "error",
+    });
+  }
+
   // Jobber gives revenue twice: on the job, and via its costing engine. They
   // ought to agree. Checking is cheap, and the whole reason this project
   // exists is that Jobber's own totals disagree with each other.
@@ -185,8 +201,11 @@ export async function syncWeek(week: {
     week,
     quotes,
     jobs: jobs.map((m) => m.job),
-    // The sentAt filter runs server-side, so this really is every quote sent
-    // in the week rather than a partial set.
+    // Every quote sent in the week is present, so the conversion denominator
+    // can be counted from the records. Not because the sentAt filter returned
+    // them — it returns nothing — but because a quote sent in the week was
+    // updated in the week, and the updatedAt sweep is unbounded. See
+    // sentThisWeek above.
     quotesAreComplete: true,
     cards: {
       // Jobber has no leads query, but its filter has an isLead flag, so a

@@ -78,6 +78,13 @@ export async function GET(request: NextRequest) {
     const sentNumbers = new Set(sent.map((q) => q.quoteNumber));
     const wonButNotSent = won.filter((q) => !sentNumbers.has(q.quoteNumber));
 
+    // What the dashboard actually reports. The sent fetch above is expected to
+    // be empty — Jobber's sentAt filter is broken — so the real figure comes
+    // from reading sentAt off the records the updatedAt sweep returned.
+    const union = new Map(candidates.map((q) => [q.quoteNumber, q]));
+    for (const q of sent) union.set(q.quoteNumber, q);
+    const derivedSent = [...union.values()].filter((q) => within(q.sentAt, week));
+
     return NextResponse.json({
       week: { start: week.start, end: week.end },
       // The answer to "can we match Kyle's screen exactly, and how".
@@ -89,6 +96,12 @@ export async function GET(request: NextRequest) {
         subtotalSum: sent.reduce((s, q) => s + q.subtotal, 0),
         totalSum: sent.reduce((s, q) => s + q.total, 0),
         quotes: sent.map(row),
+      },
+      derivedQuotesSent: {
+        count: derivedSent.length,
+        subtotalSum: derivedSent.reduce((s2, q) => s2 + q.subtotal, 0),
+        totalSum: derivedSent.reduce((s2, q) => s2 + q.total, 0),
+        quotes: derivedSent.map(row),
       },
       wonThatWeek: { count: won.length, quotes: won.map(row) },
       wonButNotInSentList: wonButNotSent.map(row),
