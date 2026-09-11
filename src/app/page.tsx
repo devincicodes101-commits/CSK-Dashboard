@@ -196,6 +196,10 @@ export default async function Dashboard({
   // not "previous" — see Delta.
   const prior = trend.length > 1 ? trend[trend.length - 2]!.metrics : null;
 
+  // Which point on the trend charts is the week being looked at. -1 when the
+  // week has not been stored yet, which simply marks nothing.
+  const here = trend.findIndex((w) => w.metrics.week.start === week.start);
+
   const revenueHistory = series((m) => m.revenueClosed);
   const marginHistory = series((m) => m.grossProfitRate);
   const winHistory = series((m) => m.conversionRate);
@@ -365,6 +369,7 @@ export default async function Dashboard({
                     label: axisLabel(w.metrics.week.start),
                     value: w.metrics.revenueClosed,
                   }))}
+                  highlight={week.start}
                 />
 
                 <div className="grid gap-5 xl:grid-cols-2">
@@ -384,6 +389,7 @@ export default async function Dashboard({
                     title="Quotes sent and won"
                     subtitle="Counts, by week. The gap between the two bars is the pipeline that did not close."
                     labels={labels}
+                    highlight={here >= 0 ? here : undefined}
                     series={[
                       {
                         name: "Sent",

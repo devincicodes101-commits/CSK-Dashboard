@@ -124,11 +124,21 @@ export function AreaTrend({
   title,
   subtitle,
   points,
+  highlight,
   aside,
 }: {
   title: string;
   subtitle?: string;
   points: readonly Point[];
+  /**
+   * The week being viewed, marked on the line.
+   *
+   * Without it the chart looks frozen: it plots the last fourteen weeks, so
+   * moving from one week to the next adds a point on the right and leaves
+   * everything else identical. The figures were changing and the picture was
+   * not, which reads as a chart wired to nothing.
+   */
+  highlight?: string;
   aside?: ReactNode;
 }) {
   const real = points.filter((p): p is Point & { value: number } => p.value !== null);
@@ -300,16 +310,44 @@ export function AreaTrend({
           );
         })}
 
-        {pts.map((p, i) => (
+        {pts.map((p, i) => {
+          const isHere = real[i]!.key === highlight;
+          return (
           <g key={real[i]!.key}>
+            {isHere ? (
+              <>
+                <line
+                  x1={p.x}
+                  x2={p.x}
+                  y1={padT}
+                  y2={base}
+                  stroke="var(--color-accent)"
+                  strokeWidth="1"
+                  strokeDasharray="3 4"
+                  opacity="0.5"
+                />
+                <text
+                  x={p.x}
+                  y={p.y - 14}
+                  textAnchor="middle"
+                  className="tnum"
+                  fontSize="12"
+                  fontWeight="600"
+                  fill="var(--color-accent)"
+                  fontFamily="var(--font-mono)"
+                >
+                  {compact(real[i]!.value)}
+                </text>
+              </>
+            ) : null}
             {/* The dot marks a real reading. The curve between two dots is
                 drawing, not data. */}
-            <circle cx={p.x} cy={p.y} r="4" fill="var(--color-surface)" />
+            <circle cx={p.x} cy={p.y} r={isHere ? 5 : 4} fill="var(--color-surface)" />
             <circle
               cx={p.x}
               cy={p.y}
-              r="4"
-              fill="none"
+              r={isHere ? 5 : 4}
+              fill={isHere ? "var(--color-accent)" : "none"}
               stroke="var(--color-accent)"
               strokeWidth="2.5"
             />
@@ -332,7 +370,8 @@ export function AreaTrend({
               </text>
             ) : null}
           </g>
-        ))}
+          );
+        })}
       </svg>
     </ChartFrame>
   );
@@ -351,11 +390,14 @@ export function GroupedBars({
   subtitle,
   labels,
   series,
+  highlight,
 }: {
   title: string;
   subtitle?: string;
   labels: readonly string[];
   series: readonly Series[];
+  /** Index of the week being viewed. See AreaTrend's highlight. */
+  highlight?: number;
 }) {
   const all = series.flatMap((s) => s.values.filter((v): v is number => v !== null));
 
@@ -435,8 +477,22 @@ export function GroupedBars({
 
         {labels.map((label, i) => {
           const cx = padL + slot * i + slot / 2;
+          const isHere = i === highlight;
           return (
             <g key={label}>
+              {isHere ? (
+                // A band rather than a border: the bars have to stay the
+                // readable thing, and an outline around a pair of bars reads
+                // as a fourth series.
+                <rect
+                  x={cx - slot / 2}
+                  y={padT}
+                  width={slot}
+                  height={base - padT}
+                  rx="6"
+                  fill="var(--color-accent-tint)"
+                />
+              ) : null}
               {series.map((s, j) => {
                 const v = s.values[i];
                 if (v === null || v === undefined) return null;
