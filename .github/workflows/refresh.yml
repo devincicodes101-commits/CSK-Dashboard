@@ -116,7 +116,17 @@ jobs:
               exit 1
               ;;
             502)
-              echo "::error::Reached the dashboard, but no week could be fetched. If the Jobber connection has expired, reconnect it in Settings."
+              # Surface the reason rather than the category. The route reports
+              # a per-week error; without it the annotation says only that
+              # something went wrong, and the person reading it has to expand
+              # the step to learn anything — which is exactly when a failing
+              # scheduled job gets ignored.
+              reason=$(jq -r '.failed[0].error // empty' response.json 2>/dev/null || true)
+              if [ -n "$reason" ]; then
+                echo "::error::Reached the dashboard, but no week could be fetched. Jobber or QuickBooks said: ${reason}"
+              else
+                echo "::error::Reached the dashboard, but no week could be fetched. See the response above."
+              fi
               exit 1
               ;;
             *)
