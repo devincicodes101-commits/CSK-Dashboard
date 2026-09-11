@@ -149,21 +149,86 @@ export function AreaTrend({
   const padB = 30;
 
   const top = niceMax(Math.max(...real.map((p) => p.value)));
-  const stepX = (W - padL - padR) / Math.max(real.length - 1, 1);
   const y = (v: number) => padT + (1 - v / top) * (H - padT - padB);
 
-  const pts = real.map((p, i) => ({ x: padL + i * stepX, y: y(p.value) }));
-  const line = smoothPath(pts);
+  /**
+   * The axis runs on real time, not on position in the array.
+   *
+   * It used to space the readings evenly, which drew a four-month gap between
+   * January and May at the same width as the one week between 13 and 20 July.
+   * The subtitle said gaps existed; the picture said they did not, and the
+   * picture is what people believe.
+   *
+   * Built from the ISO string rather than a Date, for the same reason
+   * axisLabel is: parsing "2026-08-03" and reading it back shifts a day in
+   * every timezone west of UTC.
+   */
+  const at = (iso: string) => {
+    const [yy, mm, dd] = iso.split("-").map(Number);
+    return Date.UTC(yy!, mm! - 1, dd!) / 86_400_000;
+  };
+
+  const days = real.map((p) => at(p.key));
+  const first = days[0]!;
+  const span = Math.max(days[days.length - 1]! - first, 1);
+  const x = (d: number) => padL + ((d - first) / span) * (W - padL - padR);
+
+  const pts = real.map((p, i) => ({ x: x(days[i]!), y: y(p.value) }));
+
+  /**
+   * The line breaks across missing weeks.
+   *
+   * Two readings a week apart are a trend. Two readings four months apart are
+   * two readings, and joining them draws revenue for eighteen weeks nobody
+   * ever fetched. Anything beyond a fortnight starts a new run.
+   */
+  const runs: { x: number; y: number }[][] = [];
+  let run: { x: number; y: number }[] = [];
+
+  pts.forEach((p, i) => {
+    const adjacent = i === 0 || days[i]! - days[i - 1]! <= 14;
+    if (!adjacent && run.length > 0) {
+      runs.push(run);
+      run = [];
+    }
+    run.push(p);
+  });
+  if (run.length > 0) runs.push(run);
+
   const base = H - padB;
-  const area =
-    line + " L " + pts[pts.length - 1]!.x + " " + base + " L " + pts[0]!.x + " " + base + " Z";
 
   // Five gridlines. More turns the card into graph paper and competes with
   // the line it is meant to support.
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => top * f);
 
-  // Every label on a fourteen-week axis collides. Thin to roughly six.
-  const every = Math.ceil(real.length / 6);
+  /**
+   * Which readings get an axis label.
+   *
+   * Chosen by distance along the axis, not by position in the array. Now that
+   * x follows real time, readings bunch wherever weeks were fetched together,
+   * and labelling every third one there overlaps while leaving the sparse
+   * stretches bare. The last reading always gets one — it is the week being
+   * looked at.
+   */
+  const MIN_GAP = 96;
+  const labelled = pts.map(() => false);
+  let lastLabelX = -Infinity;
+
+  pts.forEach((p, i) => {
+    if (p.x - lastLabelX >= MIN_GAP) {
+      labelled[i] = true;
+      lastLabelX = p.x;
+    }
+  });
+  if (pts.length > 0) {
+    const lastIndex = pts.length - 1;
+    // Never let the final label collide with the one before it.
+    if (!labelled[lastIndex] && pts[lastIndex]!.x - lastLabelX < MIN_GAP) {
+      const clash = labelled.lastIndexOf(true);
+      if (clash > 0) labelled[clash] = false;
+    }
+    labelled[lastIndex] = true;
+  }
 
   return (
     <ChartFrame title={title} subtitle={subtitle} aside={aside}>
@@ -204,15 +269,36 @@ export function AreaTrend({
           </g>
         ))}
 
-        <path d={area} fill="url(#areaFill)" />
-        <path
-          d={line}
-          fill="none"
-          stroke="var(--color-accent)"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        {runs.map((segment, i) => {
+          // A lone reading with no neighbouring week gets a dot and no line.
+          // There is nothing to draw a trend through.
+          if (segment.length < 2) return null;
+          const path = smoothPath(segment);
+          const shape =
+            path +
+            " L " +
+            segment[segment.length - 1]!.x +
+            " " +
+            base +
+            " L " +
+            segment[0]!.x +
+            " " +
+            base +
+            " Z";
+          return (
+            <g key={i}>
+              <path d={shape} fill="url(#areaFill)" />
+              <path
+                d={path}
+                fill="none"
+                stroke="var(--color-accent)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </g>
+          );
+        })}
 
         {pts.map((p, i) => (
           <g key={real[i]!.key}>
@@ -231,11 +317,13 @@ export function AreaTrend({
             <circle cx={p.x} cy={p.y} r="14" fill="transparent">
               <title>{real[i]!.label + " — " + compact(real[i]!.value)}</title>
             </circle>
-            {i % every === 0 || i === pts.length - 1 ? (
+            {labelled[i] ? (
               <text
                 x={p.x}
                 y={H - 8}
-                textAnchor="middle"
+                // The first and last labels would otherwise hang off the
+                // edges of the card.
+                textAnchor={i === 0 ? "start" : i === pts.length - 1 ? "end" : "middle"}
                 fontSize="11"
                 fill="var(--color-ink-4)"
                 fontFamily="var(--font-mono)"

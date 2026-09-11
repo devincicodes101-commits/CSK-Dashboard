@@ -22,10 +22,19 @@ import { SESSION_COOKIE, authConfigured, isValidSession } from "@/lib/auth";
 
 const PUBLIC = new Set(["/login", "/privacy", "/terms"]);
 
+/**
+ * Routes that carry their own authentication and must not meet this gate.
+ *
+ * /api/sync is called by Vercel Cron with a bearer secret. Sending it to the
+ * login page would turn a scheduled refresh into a 307 to a form, silently,
+ * and the dashboard would go stale the day a passphrase was set.
+ */
+const SELF_AUTHENTICATING = new Set(["/api/auth", "/api/sync"]);
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (PUBLIC.has(pathname) || pathname === "/api/auth") {
+  if (PUBLIC.has(pathname) || SELF_AUTHENTICATING.has(pathname)) {
     return NextResponse.next();
   }
 
