@@ -55,41 +55,72 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           WEEKS: ${{ github.event.inputs.weeks || '2' }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
 
-          if [ -z "${DASHBOARD_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
-            echo "::error::DASHBOARD_URL and CRON_SECRET must both be set as repository secrets."
+          # Strip ALL whitespace from both secrets before use.
+          #
+          # Pasting into GitHub's secret box keeps whatever came with the
+          # value, and a trailing newline is invisible in every UI that shows
+          # it. In a URL it makes the host unresolvable; in an Authorization
+          # header it makes the header malformed. Either way curl gives up
+          # before sending anything and reports HTTP 000, which says nothing
+          # about the cause. Vercel refuses such a value outright at build
+          # time; GitHub does not, so it is handled here.
+          base=$(printf '%s' "${DASHBOARD_URL:-}" | tr -d '[:space:]')
+          secret=$(printf '%s' "${CRON_SECRET:-}" | tr -d '[:space:]')
+
+          if [ -z "$base" ] || [ -z "$secret" ]; then
+            echo "::error::DASHBOARD_URL and CRON_SECRET must both be set as repository secrets (Settings -> Secrets and variables -> Actions)."
             exit 1
           fi
 
-          # Tolerate the two ways this secret is usually typed wrong: pasted
-          # straight off Vercel without a scheme, or with a trailing slash
-          # that would make the path //api/sync. Neither is worth a failed
-          # run and a confusing log.
-          base="${DASHBOARD_URL%/}"
+          base="${base%/}"
           case "$base" in
             http://*|https://*) ;;
             *) base="https://$base" ;;
           esac
-          echo "Refreshing ${base}/api/sync"
 
-          # The secret travels as a bearer header, not in the URL, so it stays
-          # out of GitHub's logs and out of Vercel's access logs.
-          status=$(curl --silent --show-error --fail-with-body \
-            --max-time 120 \
-            --write-out "%{http_code}" \
-            --output response.json \
-            --header "Authorization: Bearer ${CRON_SECRET}" \
-            "${base}/api/sync?weeks=${WEEKS}") || true
+          url="${base}/api/sync?weeks=${WEEKS}"
+          echo "Refreshing ${url}"
+          echo "Secret length: ${#secret} characters"
 
-          echo "HTTP ${status}"
+          # The secret travels as a bearer header, not in the query string, so
+          # it stays out of GitHub's logs and Vercel's access logs.
+          status=$(curl --silent --show-error             --max-time 120             --write-out "%{http_code}"             --output response.json             --header "Authorization: Bearer ${secret}"             "$url" 2>curl-error.txt)
+          curl_exit=$?
+
+          echo "curl exit code: ${curl_exit}"
+          echo "HTTP status: ${status}"
+
+          if [ "${curl_exit}" -ne 0 ]; then
+            echo "--- curl said ---"
+            cat curl-error.txt || true
+            echo "::error::Could not reach ${url}. Check DASHBOARD_URL is the stable production domain and that the latest Vercel deployment actually built."
+            exit 1
+          fi
+
+          echo "--- response ---"
           cat response.json || true
           echo
 
-          # /api/sync answers 502 when it managed to write nothing at all. Let
-          # that fail the run: a refresh that reports success while storing
-          # nothing is how a dashboard goes quietly stale for a month.
-          if [ "${status}" != "200" ]; then
-            echo "::error::Refresh failed with HTTP ${status}. If the Jobber connection has expired, reconnect it in Settings."
-            exit 1
-          fi
+          case "$status" in
+            200)
+              echo "Refresh complete."
+              ;;
+            401)
+              echo "::error::Rejected. CRON_SECRET in GitHub does not match CRON_SECRET in Vercel, or it is not set in Vercel at all."
+              exit 1
+              ;;
+            404)
+              echo "::error::No /api/sync on that deployment. The Vercel build probably failed — check the Deployments tab."
+              exit 1
+              ;;
+            502)
+              echo "::error::Reached the dashboard, but no week could be fetched. If the Jobber connection has expired, reconnect it in Settings."
+              exit 1
+              ;;
+            *)
+              echo "::error::Unexpected HTTP ${status}."
+              exit 1
+              ;;
+          esac
