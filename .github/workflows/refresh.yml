@@ -20,7 +20,10 @@
 # SETUP (both are repository secrets, Settings -> Secrets and variables ->
 # Actions -> New repository secret):
 #
-#   DASHBOARD_URL   https://your-project.vercel.app   (no trailing slash)
+#   DASHBOARD_URL   https://your-project.vercel.app
+#                   Use the STABLE production domain, not a deployment URL
+#                   with a hash in it — those change on every push. A missing
+#                   https:// or a trailing slash is tidied up below.
 #   CRON_SECRET     the same value set in Vercel's environment variables
 #
 # Without both, the job fails loudly rather than appearing to succeed.
@@ -59,6 +62,17 @@ jobs:
             exit 1
           fi
 
+          # Tolerate the two ways this secret is usually typed wrong: pasted
+          # straight off Vercel without a scheme, or with a trailing slash
+          # that would make the path //api/sync. Neither is worth a failed
+          # run and a confusing log.
+          base="${DASHBOARD_URL%/}"
+          case "$base" in
+            http://*|https://*) ;;
+            *) base="https://$base" ;;
+          esac
+          echo "Refreshing ${base}/api/sync"
+
           # The secret travels as a bearer header, not in the URL, so it stays
           # out of GitHub's logs and out of Vercel's access logs.
           status=$(curl --silent --show-error --fail-with-body \
@@ -66,7 +80,7 @@ jobs:
             --write-out "%{http_code}" \
             --output response.json \
             --header "Authorization: Bearer ${CRON_SECRET}" \
-            "${DASHBOARD_URL}/api/sync?weeks=${WEEKS}") || true
+            "${base}/api/sync?weeks=${WEEKS}") || true
 
           echo "HTTP ${status}"
           cat response.json || true
