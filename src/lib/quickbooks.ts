@@ -124,6 +124,30 @@ export async function accessToken(): Promise<string> {
         });
         await saveConnection(refreshed, stored.connectedAccount ?? "");
         return refreshed.access_token;
+      } catch (error) {
+        /**
+         * The same race Jobber has, and the same recovery. See accessToken in
+         * jobber.ts for the full reasoning.
+         *
+         * Intuit rotates the refresh token on every use as well, so two server
+         * instances refreshing a moment apart leave the loser holding a spent
+         * token and a rejection, on a connection that is working fine. Look
+         * again before declaring it dead: a refresh token that has changed
+         * since we read it means somebody else rotated it, and their access
+         * token is the live one.
+         *
+         * Any failure is worth re-checking here, not only a 401 — Intuit
+         * answers a spent token with 400 invalid_grant as readily as 401, and
+         * a wasted read beats a connection that needs reconnecting by hand.
+         */
+        const current = await loadTokens("quickbooks");
+        const rotatedByAnother =
+          current &&
+          current.refreshToken !== stored.refreshToken &&
+          current.expiresAt - Date.now() > 60_000;
+
+        if (rotatedByAnother) return current.accessToken;
+        throw error;
       } finally {
         refreshInFlight = null;
       }

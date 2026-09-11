@@ -168,6 +168,35 @@ export async function accessToken(): Promise<string> {
         // failure that ends with a dead connection.
         await saveConnection(refreshed, stored.connectedAccount);
         return refreshed.access_token;
+      } catch (error) {
+        /**
+         * A 401 here does not always mean the connection is gone.
+         *
+         * refreshInFlight serialises refreshes inside ONE server instance.
+         * Vercel runs many, and the scheduled job is another. Two of them can
+         * load the same refresh token a moment apart, and since Jobber
+         * invalidates a refresh token the instant it is used, the second one
+         * is handed a 401 for a connection that is perfectly healthy — the
+         * other instance just rotated it.
+         *
+         * Treating that as a dead connection is what made this look like
+         * Jobber kept expiring: reconnect, two tabs refresh at once, dead
+         * again within the hour.
+         *
+         * So before giving up, look again. If the stored refresh token has
+         * changed since we read it, somebody else won the race and their
+         * access token is the live one.
+         */
+        if (error instanceof ConnectionLost) {
+          const current = await loadTokens("jobber");
+          const rotatedByAnother =
+            current &&
+            current.refreshToken !== stored.refreshToken &&
+            current.expiresAt - Date.now() > 60_000;
+
+          if (rotatedByAnother) return current.accessToken;
+        }
+        throw error;
       } finally {
         refreshInFlight = null;
       }
