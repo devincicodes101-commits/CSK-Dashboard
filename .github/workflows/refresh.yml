@@ -1,0 +1,81 @@
+# Refreshes the dashboard every thirty minutes.
+#
+# WHY THIS EXISTS RATHER THAN A VERCEL CRON
+#
+# Vercel's Hobby plan runs cron jobs once per day and no more often. CSK are on
+# Hobby. vercel.json therefore carries a daily run as the dependable floor, and
+# this workflow does the frequent one — GitHub Actions has no such limit, costs
+# nothing on a public repository, and calls exactly the same endpoint.
+#
+# If the account ever moves to Vercel Pro, delete this file and change the
+# schedule in vercel.json to */30. Two schedulers hitting the same route is
+# harmless but pointless.
+#
+# WHAT IT ACTUALLY DOES
+#
+# One HTTPS request. All the work happens in /api/sync, which refreshes the
+# current week and the one just finished — see that route for why it leaves
+# older weeks frozen.
+#
+# SETUP (both are repository secrets, Settings -> Secrets and variables ->
+# Actions -> New repository secret):
+#
+#   DASHBOARD_URL   https://your-project.vercel.app   (no trailing slash)
+#   CRON_SECRET     the same value set in Vercel's environment variables
+#
+# Without both, the job fails loudly rather than appearing to succeed.
+
+name: Refresh dashboard
+
+on:
+  schedule:
+    # Every thirty minutes. GitHub runs scheduled jobs on a best-effort basis
+    # and can be several minutes late under load, which does not matter for a
+    # weekly report.
+    - cron: "*/30 * * * *"
+  # So it can be run by hand from the Actions tab — useful for backfilling
+  # after a reconnect without waiting for the next slot.
+  workflow_dispatch:
+    inputs:
+      weeks:
+        description: "How many recent weeks to fetch (1-26)"
+        required: false
+        default: "2"
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the sync endpoint
+        env:
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          WEEKS: ${{ github.event.inputs.weeks || '2' }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DASHBOARD_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::DASHBOARD_URL and CRON_SECRET must both be set as repository secrets."
+            exit 1
+          fi
+
+          # The secret travels as a bearer header, not in the URL, so it stays
+          # out of GitHub's logs and out of Vercel's access logs.
+          status=$(curl --silent --show-error --fail-with-body \
+            --max-time 120 \
+            --write-out "%{http_code}" \
+            --output response.json \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${DASHBOARD_URL}/api/sync?weeks=${WEEKS}") || true
+
+          echo "HTTP ${status}"
+          cat response.json || true
+          echo
+
+          # /api/sync answers 502 when it managed to write nothing at all. Let
+          # that fail the run: a refresh that reports success while storing
+          # nothing is how a dashboard goes quietly stale for a month.
+          if [ "${status}" != "200" ]; then
+            echo "::error::Refresh failed with HTTP ${status}. If the Jobber connection has expired, reconnect it in Settings."
+            exit 1
+          fi

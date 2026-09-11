@@ -4,7 +4,13 @@ import { mondayOf, shiftWeek } from "@/lib/periods";
 import { syncWeek } from "@/lib/sync";
 
 /**
- * The scheduled refresh. Vercel Cron calls this; nothing else should.
+ * The scheduled refresh. Two schedulers call this; nothing else should.
+ *
+ * Vercel Cron runs it once a day, which is all the Hobby plan allows. A
+ * GitHub Actions workflow (.github/workflows/refresh.yml) runs it every
+ * thirty minutes, which Hobby does not permit and GitHub does not charge for.
+ * Both hit this same route with the same secret. If the account moves to
+ * Vercel Pro, drop the workflow and set vercel.json to the frequent schedule.
  *
  * WHICH WEEKS, AND WHY NOT ALL OF THEM
  *
