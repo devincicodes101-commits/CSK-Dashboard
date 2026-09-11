@@ -29,7 +29,7 @@ const PUBLIC = new Set(["/login", "/privacy", "/terms"]);
  * login page would turn a scheduled refresh into a 307 to a form, silently,
  * and the dashboard would go stale the day a passphrase was set.
  */
-const SELF_AUTHENTICATING = new Set(["/api/auth", "/api/sync"]);
+const SELF_AUTHENTICATING = new Set(["/api/auth", "/api/sync", "/api/diagnostics"]);
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
