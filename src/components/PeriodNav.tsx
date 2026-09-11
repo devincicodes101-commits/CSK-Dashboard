@@ -1,11 +1,8 @@
 import { weekFromMonday } from "@/lib/metric-rules";
 import {
-  type PeriodKind,
   lastCompletedWeek,
   monthLabel,
   monthOf,
-  monthsOfYear,
-  shiftMonth,
   shiftWeek,
   weekLabel,
   weekLabelWithYear,
@@ -23,6 +20,10 @@ import {
  * The list holds a whole year, grouped by month, rather than a rolling window
  * counting back from wherever you happen to be. A rolling window meant moving
  * to July put August off the end with no way back to it.
+ *
+ * There was a Weekly/Monthly toggle here. Monthly is out of scope — CSK asked
+ * for it to be dropped — and a tab leading to an explanation of why a tab does
+ * nothing is worse than no tab.
  */
 
 function Chevron({ direction }: { direction: "left" | "right" }) {
@@ -44,7 +45,7 @@ function Chevron({ direction }: { direction: "left" | "right" }) {
 }
 
 const STEP =
-  "inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-line-strong text-ink-3 transition-colors duration-200 hover:border-accent-soft hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-line bg-surface text-ink-3 shadow-sm transition-colors duration-200 hover:border-accent-soft hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 interface Option {
   key: string;
@@ -55,46 +56,25 @@ interface Option {
 }
 
 export function PeriodNav({
-  kind,
   weekStart,
-  month,
   syncedPeriods,
 }: {
-  kind: PeriodKind;
   weekStart: string;
-  month: string;
-  /** Periods with stored figures, so the list can show which. */
+  /** Weeks with stored figures, so the list can show which. */
   syncedPeriods: readonly string[];
 }) {
-  const isWeekly = kind === "weekly";
-  const year = isWeekly ? yearOfWeek(weekStart) : Number(month.slice(0, 4));
+  const year = yearOfWeek(weekStart);
+  const current = weekLabelWithYear(weekFromMonday(weekStart));
+  const previous = `/?week=${shiftWeek(weekStart, -1)}`;
+  const next = `/?week=${shiftWeek(weekStart, 1)}`;
+  const selected = weekStart;
 
-  const current = isWeekly
-    ? weekLabelWithYear(weekFromMonday(weekStart))
-    : monthLabel(month);
-
-  const previous = isWeekly
-    ? `/?week=${shiftWeek(weekStart, -1)}`
-    : `/?period=monthly&month=${shiftMonth(month, -1)}`;
-  const next = isWeekly
-    ? `/?week=${shiftWeek(weekStart, 1)}`
-    : `/?period=monthly&month=${shiftMonth(month, 1)}`;
-
-  const selected = isWeekly ? weekStart : month;
-
-  const options: Option[] = isWeekly
-    ? weeksOfYear(year, lastCompletedWeek()).map((monday) => ({
-        key: monday,
-        href: `/?week=${monday}`,
-        label: weekLabel(weekFromMonday(monday)),
-        group: monthLabel(monthOf(monday)).replace(` ${year}`, ""),
-      }))
-    : monthsOfYear(year, monthOf(new Date().toISOString().slice(0, 10))).map((ym) => ({
-        key: ym,
-        href: `/?period=monthly&month=${ym}`,
-        label: monthLabel(ym).replace(` ${year}`, ""),
-        group: String(year),
-      }));
+  const options: Option[] = weeksOfYear(year, lastCompletedWeek()).map((monday) => ({
+    key: monday,
+    href: `/?week=${monday}`,
+    label: weekLabel(weekFromMonday(monday)),
+    group: monthLabel(monthOf(monday)).replace(` ${year}`, ""),
+  }));
 
   // Group in place; the list is already newest first, so months come out in
   // that order without sorting again.
@@ -107,34 +87,21 @@ export function PeriodNav({
 
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-4">
-      <div
-        role="group"
-        aria-label="Reporting period"
-        className="inline-flex rounded-full border border-line p-0.5"
-      >
-        <TabLink href={`/?week=${weekStart}`} active={isWeekly}>
-          Weekly
-        </TabLink>
-        <TabLink href={`/?period=monthly&month=${month}`} active={!isWeekly}>
-          Monthly
-        </TabLink>
-      </div>
-
       <div className="flex items-center gap-2">
         <a href={previous} className={STEP} aria-label="Previous period" rel="nofollow">
           <Chevron direction="left" />
         </a>
 
         <details className="relative">
-          <summary className="micro flex h-9 cursor-pointer list-none items-center gap-2 rounded-full border border-line-strong px-4 text-ink transition-colors duration-200 hover:border-accent-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
+          <summary className="micro flex h-9 cursor-pointer list-none items-center gap-2 rounded-full border border-line bg-surface px-4 text-ink shadow-sm transition-colors duration-200 hover:border-accent-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
             {current}
             <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden fill="currentColor">
               <path d="M3 6 L8 11 L13 6 Z" />
             </svg>
           </summary>
 
-          <div className="absolute left-0 top-11 z-30 max-h-[26rem] w-64 overflow-y-auto rounded-xl border border-line bg-raised py-1 shadow-2xl shadow-black/60">
-            <p className="micro sticky top-0 z-10 bg-raised px-4 py-2.5 text-accent">
+          <div className="card absolute left-0 top-11 z-30 max-h-[26rem] w-64 overflow-y-auto py-1">
+            <p className="micro sticky top-0 z-10 bg-surface px-4 py-2.5 text-accent">
               {year}
             </p>
 
@@ -177,27 +144,5 @@ export function PeriodNav({
         </a>
       </div>
     </div>
-  );
-}
-
-function TabLink({
-  href,
-  active,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <a
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={`micro cursor-pointer rounded-full px-4 py-2 transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-        active ? "bg-accent-tint text-accent" : "text-ink-3 hover:text-ink"
-      }`}
-    >
-      {children}
-    </a>
   );
 }

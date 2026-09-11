@@ -9,7 +9,13 @@
 
 import { type Week, weekFromMonday } from "./metric-rules";
 
-export type PeriodKind = "weekly" | "monthly";
+/**
+ * There is no monthly period any more.
+ *
+ * CSK dropped the monthly tab, and it was blocked regardless on quoted hours
+ * that nobody records. monthLabel and monthOf survive because the week picker
+ * groups its list by month; monthsOfYear and shiftMonth went with the tab.
+ */
 
 /* ------------------------------------------------------------------- weeks */
 
@@ -97,16 +103,6 @@ export function monthOf(monday: string): string {
   return monday.slice(0, 7);
 }
 
-/** Every month of a year, newest first, not running past `notAfter`. */
-export function monthsOfYear(year: number, notAfter: string): string[] {
-  const months: string[] = [];
-  for (let m = 1; m <= 12; m += 1) {
-    const ym = `${year}-${String(m).padStart(2, "0")}`;
-    if (ym > notAfter) break;
-    months.push(ym);
-  }
-  return months.reverse();
-}
 
 export function recentMonths(count: number, from: string): string[] {
   const [y, m] = from.split("-").map(Number);
@@ -116,11 +112,6 @@ export function recentMonths(count: number, from: string): string[] {
   });
 }
 
-export function shiftMonth(month: string, months: number): string {
-  const [y, m] = month.split("-").map(Number);
-  const d = new Date(Date.UTC(y!, m! - 1 + months, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
 
 /* ------------------------------------------------------------------ labels */
 

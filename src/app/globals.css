@@ -1,55 +1,64 @@
 @import "tailwindcss";
 
 /*
- * Warm dark, single theme.
+ * Light, card-based. One theme, not two.
  *
- * The ground is a brown-black rather than a blue-black, and every neutral is
- * pulled a few degrees toward the bronze accent. That is the whole trick: a
- * cold grey next to a warm accent reads as two unrelated systems, and the
- * page stops looking designed.
+ * These blocks get screenshotted out of the app and pasted into messages, so
+ * what ships has to be what travels — a theme that changed under the reader
+ * would mean the same block arriving two different ways.
  *
- * One look, not two. These blocks get screenshotted out of the app and pasted
- * into messages, so what ships has to be what travels — a theme that changes
- * under the reader would mean the same block arriving two different ways.
+ * The token NAMES are unchanged from the dark build on purpose: ground,
+ * surface, ink, line, accent. Every class in the app keeps working and only
+ * the values move. A rename would have touched a hundred class strings for no
+ * gain and hidden the real change in the noise.
  */
 
 @theme {
-  /* Ground climbs in warmth as it comes forward. */
-  --color-ground: #0b0907;
-  --color-surface: #141010;
-  --color-surface-2: #1b1614;
-  --color-raised: #221b17;
+  /* Ground recedes, surfaces come forward. The inverse of the dark build. */
+  --color-ground: #f1f4f8;
+  --color-surface: #ffffff;
+  --color-surface-2: #f7f9fb;
+  --color-raised: #eef2f6;
 
-  --color-line: #2b2320;
-  --color-line-strong: #3d332c;
+  --color-line: #e6ebf1;
+  --color-line-strong: #d3dbe5;
 
-  /* Cream, not white. Pure white on a warm ground reads blue. */
-  --color-ink: #f5efe7;
-  --color-ink-2: #bcb0a3;
-  --color-ink-3: #877b6f;
-  --color-ink-4: #5f554d;
+  /* Slate, not pure black. Pure black on white is harsher than it needs to be
+     and makes the figures shout over their own labels. */
+  --color-ink: #10192b;
+  --color-ink-2: #3d4a60;
+  --color-ink-3: #6b7a91;
+  --color-ink-4: #9aa7b8;
 
-  /* Bronze. The one saturated colour on the page. */
-  --color-accent: #d3934f;
-  --color-accent-soft: #8a5c2e;
-  --color-accent-tint: #2a1e13;
+  /* Green carries the brand and every positive figure. */
+  --color-accent: #16a34a;
+  --color-accent-soft: #86e0ab;
+  --color-accent-tint: #e8f8ef;
+  --color-on-accent: #ffffff;
 
-  /* Semantic, and deliberately desaturated so they sit beside the bronze
-     rather than fighting it. */
-  --color-good: #74bd97;
-  --color-good-tint: #14261d;
-  --color-warn: #d9ab5c;
-  --color-warn-tint: #262014;
-  --color-bad: #e08670;
-  --color-bad-tint: #2a1815;
+  /* Blue is the second series — bars, comparisons, last week against this. */
+  --color-blue: #2f6ef0;
+  --color-blue-soft: #9dbcfa;
+  --color-blue-tint: #eaf1fe;
+
+  --color-good: #16a34a;
+  --color-good-tint: #e8f8ef;
+  --color-warn: #c2740a;
+  --color-warn-tint: #fdf3e3;
+  --color-bad: #d0413b;
+  --color-bad-tint: #fdeeed;
 
   /* Loaded by next/font in layout.tsx, which sets these two variables. */
   --font-display: var(--font-archivo), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* One shadow, used everywhere a card lifts off the ground. Two would read
+     as two different elevations and there is only one. */
+  --shadow-card: 0 1px 2px rgb(16 25 43 / 0.04), 0 8px 24px -12px rgb(16 25 43 / 0.10);
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
@@ -71,27 +80,33 @@ body {
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+}
+
 /*
- * The one flourish: a low bronze horizon behind the masthead.
+ * A pale green wash behind the auxiliary pages' mastheads.
  *
- * Sits behind content at very low opacity and never moves. Anything more
- * animated would be decoration competing with the numbers, which are the
- * reason anyone opens this.
+ * The dashboard itself does not use it — its cards already give the page
+ * structure, and a gradient behind them muddied the card edges. Sign-in,
+ * settings and the policy pages are plainer, and want something.
  */
 .horizon {
   position: absolute;
   inset: 0 0 auto 0;
-  height: 420px;
-  background:
-    radial-gradient(
-      120% 100% at 50% 0%,
-      color-mix(in oklab, var(--color-accent) 14%, transparent) 0%,
-      transparent 62%
-    );
+  height: 340px;
+  background: radial-gradient(
+    120% 100% at 50% 0%,
+    color-mix(in oklab, var(--color-accent) 9%, transparent) 0%,
+    transparent 64%
+  );
   pointer-events: none;
   z-index: 0;
 }

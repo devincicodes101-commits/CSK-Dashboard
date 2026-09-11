@@ -12,49 +12,67 @@
  */
 export default function Loading() {
   return (
-    <div className="relative min-h-screen">
-      <div className="horizon" aria-hidden />
+    <div className="min-h-screen">
+      <div className="mx-auto max-w-[1440px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+        <div className="grid gap-5 lg:grid-cols-[236px_minmax(0,1fr)] lg:gap-6">
+          {/* The rail's footprint, so the content does not shift sideways
+              when the real one arrives. */}
+          <div aria-hidden className="card hidden h-64 lg:block" />
 
-      <main className="relative z-10 mx-auto max-w-6xl px-5 pt-12 sm:px-8 sm:pt-16">
-        <p className="micro mb-3 text-accent">CSK Electric</p>
-        <h1 className="font-display text-[clamp(2rem,5vw,3rem)] font-semibold leading-[0.95] tracking-[-0.035em] text-ink">
-          CSK Dashboard
-        </h1>
-
-        <div className="mt-10 flex items-center gap-3">
-          <span
-            aria-hidden
-            className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent"
-          />
-          <p className="micro text-ink-3">Fetching this week from Jobber and QuickBooks</p>
-        </div>
-
-        <p className="mt-4 max-w-md font-mono text-[11px] leading-relaxed text-ink-4">
-          This happens once per week of data. After that it is stored and opens
-          straight away.
-        </p>
-
-        {/* The shape of what is coming, so the page does not jump when it
-            arrives. Three blocks, matching the real layout. */}
-        <div className="mt-10 flex flex-col gap-4" aria-hidden>
-          {[0, 1, 2].map((block) => (
-            <div
-              key={block}
-              className="rounded-xl border border-line bg-surface px-6 py-6"
-            >
-              <div className="mb-6 h-3 w-40 rounded bg-surface-2" />
-              <div className="grid grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-3 lg:grid-cols-4">
-                {[0, 1, 2, 3].map((tile) => (
-                  <div key={tile} className="flex flex-col gap-2">
-                    <div className="h-2 w-20 rounded bg-surface-2" />
-                    <div className="h-6 w-24 rounded bg-surface-2" />
-                  </div>
-                ))}
+          <div className="flex min-w-0 flex-col gap-5">
+            <header className="card px-5 py-5 sm:px-6">
+              <h1 className="font-display text-[22px] font-semibold leading-none tracking-[-0.03em] text-ink">
+                Dashboard
+              </h1>
+              <div className="mt-4 flex items-center gap-3 border-t border-line pt-4">
+                <span
+                  aria-hidden
+                  className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent"
+                />
+                <p className="micro text-ink-3">
+                  Fetching this week from Jobber and QuickBooks
+                </p>
               </div>
+              <p className="mt-3 max-w-md font-mono text-[11px] leading-relaxed text-ink-4">
+                This happens once per week of data. After that it is stored and
+                opens straight away.
+              </p>
+            </header>
+
+            {/* The shape of what is coming, so the page does not jump when it
+                arrives: four headline cards, a chart, then the blocks. */}
+            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4" aria-hidden>
+              {[0, 1, 2, 3].map((tile) => (
+                <div key={tile} className="card flex flex-col gap-4 p-5">
+                  <div className="h-3 w-24 rounded bg-raised" />
+                  <div className="h-7 w-28 rounded bg-raised" />
+                  <div className="h-2 w-32 rounded bg-raised" />
+                </div>
+              ))}
             </div>
-          ))}
+
+            <div aria-hidden className="card h-[300px] p-6">
+              <div className="h-3 w-44 rounded bg-raised" />
+            </div>
+
+            <div className="flex flex-col gap-5" aria-hidden>
+              {[0, 1, 2].map((block) => (
+                <div key={block} className="card px-6 py-6">
+                  <div className="mb-6 h-3 w-40 rounded bg-raised" />
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-3 lg:grid-cols-4">
+                    {[0, 1, 2, 3].map((tile) => (
+                      <div key={tile} className="flex flex-col gap-2">
+                        <div className="h-2 w-20 rounded bg-raised" />
+                        <div className="h-6 w-24 rounded bg-raised" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

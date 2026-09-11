@@ -50,21 +50,17 @@ export async function syncedWeeks(): Promise<string[]> {
   return (data ?? []).map((row) => row.week_start as string);
 }
 
-export async function loadWeek(weekStart: string): Promise<StoredWeek | null> {
-  if (!available()) return null;
+type Row = Record<string, unknown>;
 
-  const { data, error } = await serviceClient()
-    .from("week_snapshots")
-    .select("*")
-    .eq("week_start", weekStart)
-    .maybeSingle();
+function n(v: unknown): number {
+  return Number(v ?? 0);
+}
+function maybe(v: unknown): number | null {
+  return v === null || v === undefined ? null : Number(v);
+}
 
-  if (error) throw new Error(`Could not read the stored week: ${error.message}`);
-  if (!data) return null;
-
-  const n = (v: unknown): number => Number(v ?? 0);
-  const maybe = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
-
+/** One database row back into a week. Shared by the single and bulk loaders. */
+function toStoredWeek(data: Row): StoredWeek {
   return {
     syncedAt: data.synced_at as string,
     status: data.status as "draft" | "final",
@@ -107,6 +103,52 @@ export async function loadWeek(weekStart: string): Promise<StoredWeek | null> {
       problems: (data.problems as Problem[]) ?? [],
     },
   };
+}
+
+export async function loadWeek(weekStart: string): Promise<StoredWeek | null> {
+  if (!available()) return null;
+
+  const { data, error } = await serviceClient()
+    .from("week_snapshots")
+    .select("*")
+    .eq("week_start", weekStart)
+    .maybeSingle();
+
+  if (error) throw new Error(`Could not read the stored week: ${error.message}`);
+  if (!data) return null;
+
+  return toStoredWeek(data as Row);
+}
+
+/**
+ * The weeks behind the trend charts, oldest first.
+ *
+ * Only weeks already stored. A chart cannot show a week nobody has opened,
+ * and inventing the gap — interpolating, or drawing zero — would put a line
+ * on the page that describes nothing. So the charts plot what exists and say
+ * how many weeks that is.
+ *
+ * Bounded because a year of Mondays is the most any of these charts can show
+ * legibly, and reading more would cost a query nothing uses.
+ */
+export async function loadRecentWeeks(
+  upTo: string,
+  limit = 14,
+): Promise<StoredWeek[]> {
+  if (!available()) return [];
+
+  const { data, error } = await serviceClient()
+    .from("week_snapshots")
+    .select("*")
+    .lte("week_start", upTo)
+    .order("week_start", { ascending: false })
+    .limit(limit);
+
+  // A dashboard that renders without its charts beats one that will not
+  // render, so this degrades rather than throws — same reasoning as
+  // syncedWeeks above.
+  if (error) return [];
+  return (data ?? []).map((row) => toStoredWeek(row as Row)).reverse();
 }
 
 /**

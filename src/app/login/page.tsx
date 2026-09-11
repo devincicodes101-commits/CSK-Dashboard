@@ -48,7 +48,7 @@ export default async function Login({
 
           <button
             type="submit"
-            className="mt-2 cursor-pointer rounded-full bg-accent px-4 py-2.5 font-display text-[13px] font-medium text-ground transition-colors duration-200 hover:bg-[#e0a463] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="mt-2 cursor-pointer rounded-full bg-accent px-4 py-2.5 font-display text-[13px] font-medium text-on-accent transition-colors duration-200 hover:bg-[#12903f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             Sign in
           </button>
