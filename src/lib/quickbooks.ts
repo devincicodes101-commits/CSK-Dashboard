@@ -34,6 +34,16 @@ export function apiBase(): string {
     : "https://sandbox-quickbooks.api.intuit.com";
 }
 
+/**
+ * The callback address registered on the Intuit app.
+ *
+ * Exposed so the connect route can check it is starting the flow on the same
+ * host the callback will return to — see canonical() there.
+ */
+export function redirectUri(): string {
+  return env("QBO_REDIRECT_URI");
+}
+
 export function authorizeUrl(state: string): string {
   const params = new URLSearchParams({
     client_id: env("QBO_CLIENT_ID"),

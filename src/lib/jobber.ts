@@ -48,6 +48,16 @@ export function authorizeUrl(state: string): string {
   return `${JOBBER_AUTHORIZE_URL}?${params}`;
 }
 
+/**
+ * The callback address registered on the Jobber app.
+ *
+ * Exposed so the connect route can check it is starting the flow on the same
+ * host the callback will return to — see canonical() there.
+ */
+export function redirectUri(): string {
+  return env("JOBBER_REDIRECT_URI");
+}
+
 /** The stored refresh token has been spent. Only reconnecting fixes it. */
 export class ConnectionLost extends Error {
   constructor() {

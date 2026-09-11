@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { exchangeCode, saveConnection } from "@/lib/jobber";
+import { exchangeCode, redirectUri, saveConnection } from "@/lib/jobber";
 import { fetchAccountName } from "@/lib/jobber-queries";
-import { loadTokens } from "@/lib/token-store";
 
 /**
  * Where Jobber sends the browser back after someone approves the app.
@@ -28,26 +27,33 @@ export async function GET(request: NextRequest) {
   // Missing and mismatched mean different things, and conflating them sends
   // people hunting for a security problem when they simply took too long.
   if (!expected) {
-    // The state cookie is deleted the moment a connection succeeds, so
-    // arriving here without one usually means this callback URL is being
-    // replayed — a refresh, or the back button, after it already worked.
-    // If a connection is in fact stored, nothing is wrong and saying
-    // "expired" sends someone off to fix a problem they do not have.
-    const existing = await loadTokens("jobber").catch(() => null);
-    if (existing) {
-      const settled = new URL("/settings", request.url);
-      settled.searchParams.set("connected", "jobber");
-      if (existing.connectedAccount) {
-        settled.searchParams.set("account", existing.connectedAccount);
-      }
-      return NextResponse.redirect(settled);
-    }
-
+    /**
+     * NEVER report success from here.
+     *
+     * This used to check whether a connection was already stored and, if so,
+     * redirect as though the reconnect had worked — on the theory that
+     * arriving without a state cookie meant the callback was being replayed
+     * by a refresh or the back button.
+     *
+     * It cost two days. Every reconnect arrived without the cookie, because
+     * each was started from a Vercel deployment URL while the registered
+     * callback returns to the canonical host — so the cookie was set on one
+     * host and read on another. This branch saw a stored connection, threw
+     * away a perfectly good authorisation code, and sent the browser to
+     * "Connected to CSK Electric Inc". Meanwhile the row in the database
+     * stayed two days old and every scheduled sync failed on a spent refresh
+     * token.
+     *
+     * A screen that says connected while nothing was saved is worse than any
+     * error message. The connect route now bounces to the right host first,
+     * so this should be unreachable; if it is reached, it says so.
+     */
     return fail(
       request,
-      "That connection attempt expired, or its link had already been used. " +
-        "This is what happens on a browser refresh or back. Click Connect " +
-        "Jobber to start a fresh one.",
+      "The connection could not be verified: no state cookie came back with " +
+        "this callback. That usually means the flow was started on a " +
+        "different address from the one Jobber returns to. Open Settings on " +
+        `${new URL(redirectUri()).origin} and click Connect there.`,
     );
   }
   if (!state || state !== expected) {
