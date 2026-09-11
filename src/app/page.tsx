@@ -195,13 +195,23 @@ export default async function Dashboard({
   const series = (pick: (m: (typeof trend)[number]["metrics"]) => number | null) =>
     trend.map((w) => pick(w.metrics));
 
-  // The reading before this one, for the change badges. "Previous stored",
-  // not "previous" — see Delta.
-  const prior = trend.length > 1 ? trend[trend.length - 2]!.metrics : null;
-
   // Which point on the trend charts is the week being looked at. -1 when the
   // week has not been stored yet, which simply marks nothing.
   const here = trend.findIndex((w) => w.metrics.week.start === week.start);
+
+  /**
+   * The reading immediately before this one, for the change badges.
+   *
+   * Found relative to the anchor, NOT as the second-to-last of the window.
+   * Since loadTrendWeeks began extending forwards when there is no history
+   * behind, the anchor is not always last — open the earliest stored week and
+   * the old code compared it against a week three months in its future, and
+   * showed the arrow pointing the wrong way while doing it.
+   *
+   * "Previous stored", not "previous": if nobody fetched last week, this is
+   * whatever came before in the database. Delta's tooltip says so.
+   */
+  const prior = here > 0 ? trend[here - 1]!.metrics : null;
 
   const revenueHistory = series((m) => m.revenueClosed);
   const marginHistory = series((m) => m.grossProfitRate);
@@ -327,6 +337,7 @@ export default async function Dashboard({
                     current={metrics.grossProfitRate}
                     previous={prior?.grossProfitRate ?? null}
                     history={marginHistory}
+                    unit="rate"
                     footnote={`${money(metrics.grossProfit)} on ${money(metrics.revenueClosed)}`}
                   />
                   <StatCard
@@ -336,6 +347,7 @@ export default async function Dashboard({
                     current={metrics.conversionRate}
                     previous={prior?.conversionRate ?? null}
                     history={winHistory}
+                    unit="rate"
                     tone="blue"
                     footnote={`${count(metrics.wonCount)} won of ${count(metrics.quotesSentCount)} sent`}
                   />
@@ -346,6 +358,7 @@ export default async function Dashboard({
                     current={metrics.arOver30Rate}
                     previous={prior?.arOver30Rate ?? null}
                     history={arHistory}
+                    unit="rate"
                     // Late money going up is bad news, so the badge has to
                     // know which direction is good or it will colour a
                     // worsening week green.

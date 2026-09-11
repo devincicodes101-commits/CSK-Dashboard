@@ -552,6 +552,32 @@ export function Donut({
   centreLabel: string;
   centreValue: string;
 }) {
+  /**
+   * A share-of-total ring cannot honestly show a negative share.
+   *
+   * Dropping the negative slice and drawing the rest was the old behaviour:
+   * on a week where costs exceeded revenue, labour and material would fill
+   * the ring and read 55% and 45% of a total that silently excluded the loss,
+   * while the centre showed a revenue figure smaller than the two of them
+   * together. Every number on the card would have been wrong in the same
+   * direction, and the picture would have looked entirely normal.
+   */
+  const negative = slices.filter((s) => s.value < 0);
+  if (negative.length > 0) {
+    return (
+      <ChartFrame title={title} subtitle={subtitle}>
+        <div className="flex h-[180px] items-center justify-center rounded-xl border border-dashed border-bad/40 bg-bad-tint px-6 text-center">
+          <p className="font-mono text-[11px] leading-relaxed text-bad">
+            {negative.map((s) => `${s.name} is ${compact(s.value)}`).join("; ")}.
+            {" "}
+            Costs exceeded revenue this week, which a share-of-total chart
+            cannot show. The figures are in the blocks below.
+          </p>
+        </div>
+      </ChartFrame>
+    );
+  }
+
   const positive = slices.filter((s) => s.value > 0);
   const total = positive.reduce((sum, s) => sum + s.value, 0);
 
@@ -692,24 +718,41 @@ export function Delta({
   current,
   previous,
   goodWhen = "up",
+  unit = "amount",
 }: {
   current: number | null;
   previous: number | null;
   goodWhen?: "up" | "down";
+  /**
+   * "rate" for figures that are already percentages.
+   *
+   * Gross profit going from 33.2% to 62.4% is a rise of 29.2 PERCENTAGE
+   * POINTS. Reported as a relative change it reads "88.2%", sitting directly
+   * beneath the number 62.4% — which invites exactly the wrong reading, and
+   * did. Rates report points; amounts report percentages.
+   */
+  unit?: "amount" | "rate";
 }) {
-  if (current === null || previous === null || previous === 0) return null;
+  if (current === null || previous === null) return null;
+  if (unit === "amount" && previous === 0) return null;
 
-  const change = (current - previous) / Math.abs(previous);
+  const change =
+    unit === "rate" ? current - previous : (current - previous) / Math.abs(previous);
   if (!Number.isFinite(change)) return null;
 
   const up = change >= 0;
   const good = goodWhen === "up" ? up : !up;
   const tone =
-    Math.abs(change) < 0.005
+    Math.abs(change) < 0.0005
       ? "bg-raised text-ink-3"
       : good
         ? "bg-good-tint text-good"
         : "bg-bad-tint text-bad";
+
+  const reading =
+    unit === "rate"
+      ? `${Math.abs(change * 100).toFixed(1)} pts`
+      : `${Math.abs(change * 100).toFixed(1)}%`;
 
   return (
     <span
@@ -717,10 +760,14 @@ export function Delta({
         "tnum inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] font-medium " +
         tone
       }
-      title="Against the previous stored week"
+      title={
+        unit === "rate"
+          ? "Change in percentage points, against the previous stored week"
+          : "Against the previous stored week"
+      }
     >
       <span aria-hidden>{up ? "↑" : "↓"}</span>
-      {Math.abs(change * 100).toFixed(1) + "%"}
+      {reading}
     </span>
   );
 }

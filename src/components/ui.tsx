@@ -218,6 +218,7 @@ export function StatCard({
   previous,
   history,
   goodWhen = "up",
+  unit = "amount",
   tone = "accent",
   footnote,
 }: {
@@ -228,6 +229,8 @@ export function StatCard({
   previous: number | null;
   history: readonly (number | null)[];
   goodWhen?: "up" | "down";
+  /** "rate" where the headline is already a percentage. See Delta. */
+  unit?: "amount" | "rate";
   tone?: "accent" | "blue";
   footnote?: string;
 }) {
@@ -251,7 +254,7 @@ export function StatCard({
           <p className="tnum font-display text-[28px] leading-none font-semibold tracking-[-0.03em] text-ink">
             {value}
           </p>
-          <Delta current={current} previous={previous} goodWhen={goodWhen} />
+          <Delta current={current} previous={previous} goodWhen={goodWhen} unit={unit} />
         </div>
         <Sparkline values={history} tone={tone} />
       </div>
