@@ -1,7 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { fetchQuotesSent, fetchQuotesPossiblyWon } from "@/lib/jobber-queries";
+import {
+  fetchJobsCompleted,
+  fetchQuotesPossiblyWon,
+  fetchQuotesSent,
+} from "@/lib/jobber-queries";
 import { graphql } from "@/lib/jobber";
-import { weekFromMonday, within, type Quote } from "@/lib/metric-rules";
+import { round2, weekFromMonday, within, type Quote } from "@/lib/metric-rules";
 
 /**
  * Lists the quotes Jobber's API returns for a week, one row each.
@@ -14,6 +18,11 @@ import { weekFromMonday, within, type Quote } from "@/lib/metric-rules";
  * This prints exactly what the API returns, with quote numbers, so ours can
  * be lined up against the screen row by row. Same idea as the QuickBooks raw
  * route, which is how the cash bug was found: stop inferring, read the data.
+ *
+ * It lists the closed jobs too, itemised. Revenue — Jobs Closed is a single
+ * figure on the dashboard and can be a large one; being asked "where does
+ * $217k come from" deserves an answer with job numbers on it rather than a
+ * description of the query.
  *
  *   /api/jobber/raw?week=2026-08-03
  *
@@ -67,6 +76,7 @@ export async function GET(request: NextRequest) {
 
     const sent = await fetchQuotesSent(week.start, week.end);
     const candidates = await fetchQuotesPossiblyWon(week.start);
+    const jobs = await fetchJobsCompleted(week.start, week.end);
 
     const won = candidates.filter(
       (q) => within(q.approvedAt, week) || within(q.convertedAt, week),
@@ -103,6 +113,34 @@ export async function GET(request: NextRequest) {
         totalSum: derivedSent.reduce((s2, q) => s2 + q.total, 0),
         quotes: derivedSent.map(row),
       },
+      /**
+       * Every job behind Revenue — Jobs Closed, and the costs behind the
+       * donut. Revenue less labour less material IS gross profit, so these
+       * three columns are the whole of that block.
+       */
+      jobsClosed: {
+        count: jobs.length,
+        revenue: round2(jobs.reduce((t, m) => t + m.job.revenue, 0)),
+        labourCost: round2(jobs.reduce((t, m) => t + m.job.labourCost, 0)),
+        materialCost: round2(jobs.reduce((t, m) => t + m.job.materialCost, 0)),
+        jobs: jobs.map((m) => ({
+          job: m.job.jobNumber,
+          client: m.job.clientName,
+          title: m.job.title,
+          closedAt: m.job.closedAt,
+          revenue: m.job.revenue,
+          labourCost: m.job.labourCost,
+          materialCost: m.job.materialCost,
+          grossProfit: round2(
+            m.job.revenue - m.job.labourCost - m.job.materialCost,
+          ),
+          fromQuote: m.fromQuoteNumber,
+          // Jobber's own revenue for the row, kept so a disagreement with its
+          // costing engine is visible rather than merely reconciled away.
+          jobberReportedRevenue: m.reportedRevenue,
+        })),
+      },
+
       wonThatWeek: { count: won.length, quotes: won.map(row) },
       wonButNotInSentList: wonButNotSent.map(row),
     });
