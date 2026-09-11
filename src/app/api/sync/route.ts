@@ -59,12 +59,21 @@ import { syncWeek } from "@/lib/sync";
 export const maxDuration = 60;
 
 /**
- * Stop here rather than at the wall.
+ * Stop well short of the wall, and judge by what a week here actually costs.
  *
- * Leaves room for the week in flight to finish and for the response to be
- * written. Being killed mid-week loses the work and tells the caller nothing.
+ * A fixed 45s budget still produced 504s, because it only asked "have I spent
+ * my budget", never "can I afford another one". Starting a twenty-second week
+ * at forty-four seconds overruns by exactly as much as you would expect.
+ *
+ * Older weeks are the expensive ones. QUOTES_TRANSITIONED deliberately has no
+ * upper bound on updatedAt — see the comment there — so syncing January pulls
+ * every quote touched since January, fifty at a time. A recent week scans a
+ * few hundred; an old one can scan the lot.
+ *
+ * So the budget is smaller, and a week is only started if the slowest one so
+ * far would still fit inside it.
  */
-const DEADLINE_MS = 45_000;
+const DEADLINE_MS = 32_000;
 
 function authorised(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET?.trim();
@@ -107,14 +116,21 @@ export async function GET(request: NextRequest) {
   const failed: { week: string; error: string }[] = [];
   let nextSkip: number | null = null;
 
+  // The longest week seen in this run, used to decide whether another fits.
+  let slowestWeekMs = 0;
+
   for (const [i, monday] of mondays.entries()) {
-    // Check before starting a week, never during. A week either completes or
-    // is left for the next call; there is no half-written week.
-    if (i > 0 && Date.now() - started > DEADLINE_MS) {
+    // Checked before starting a week, never during. A week either completes
+    // or is left for the next call; there is no half-written week.
+    //
+    // The first week always runs: refusing to do any work at all would leave
+    // the caller looping forever on the same offset.
+    if (i > 0 && Date.now() - started + slowestWeekMs > DEADLINE_MS) {
       nextSkip = skip + i;
       break;
     }
 
+    const weekStarted = Date.now();
     try {
       await syncWeek(weekFromMonday(monday));
       written.push(monday);
@@ -124,6 +140,7 @@ export async function GET(request: NextRequest) {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+    slowestWeekMs = Math.max(slowestWeekMs, Date.now() - weekStarted);
   }
 
   return NextResponse.json(
@@ -132,6 +149,7 @@ export async function GET(request: NextRequest) {
       elapsedSeconds: Math.round((Date.now() - started) / 100) / 10,
       written,
       failed,
+      slowestWeekSeconds: Math.round(slowestWeekMs / 100) / 10,
       // Non-null means the run stopped early to stay inside the timeout. Call
       // again with this as `skip` to carry on.
       nextSkip,

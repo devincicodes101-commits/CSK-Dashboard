@@ -83,30 +83,32 @@ jobs:
           echo "Refreshing ${base}/api/sync"
           echo "Secret length: ${#secret} characters"
 
-          # Walk through the weeks in batches.
+          # Walk backwards through the weeks, ONE REQUEST PER WEEK.
           #
-          # A cold week costs eight API calls and several seconds, and Vercel's
-          # Hobby plan kills a function at sixty seconds. /api/sync therefore
-          # stops before that wall and reports `nextSkip` — where to carry on
-          # from. Looping here is what lets a twenty-week backfill finish
-          # without needing a bigger plan.
+          # `weeks` here is the total to cover, not the size of a request.
+          # Older weeks are slow — QUOTES_TRANSITIONED has no upper bound on
+          # updatedAt, so syncing January pulls every quote touched since
+          # January — and Vercel's Hobby plan kills a function at sixty
+          # seconds. Asking for several at once was what produced the 504s.
+          #
+          # One week per request is always comfortably inside the limit, and
+          # the cost is a handful of extra HTTPS calls, which are free.
           skip=0
           total=0
-          attempt=0
+          failures=0
 
-          while : ; do
-            attempt=$((attempt + 1))
-            if [ "$attempt" -gt 20 ]; then
-              echo "::error::Gave up after 20 batches. Something is not making progress."
-              exit 1
-            fi
-
-            url="${base}/api/sync?weeks=${WEEKS}&skip=${skip}"
-            echo "--- batch ${attempt}: skip=${skip} ---"
+          while [ "$skip" -lt "$WEEKS" ]; do
+            url="${base}/api/sync?weeks=1&skip=${skip}"
+            echo "--- week ${skip} back ---"
 
             # The secret travels as a bearer header, not in the query string,
             # so it stays out of GitHub's logs and Vercel's.
-            status=$(curl --silent --show-error               --max-time 120               --write-out "%{http_code}"               --output response.json               --header "Authorization: Bearer ${secret}"               "$url" 2>curl-error.txt)
+            status=$(curl --silent --show-error \
+              --max-time 120 \
+              --write-out "%{http_code}" \
+              --output response.json \
+              --header "Authorization: Bearer ${secret}" \
+              "$url" 2>curl-error.txt)
             curl_exit=$?
 
             if [ "${curl_exit}" -ne 0 ]; then
@@ -120,7 +122,10 @@ jobs:
             echo
 
             case "$status" in
-              200) ;;
+              200)
+                batch=$(jq -r '.written | length' response.json 2>/dev/null || echo 0)
+                total=$((total + batch))
+                ;;
               401)
                 echo "::error::Rejected. CRON_SECRET in GitHub does not match CRON_SECRET in Vercel, or it is not set in Vercel at all."
                 exit 1
@@ -129,18 +134,13 @@ jobs:
                 echo "::error::No /api/sync on that deployment. The Vercel build probably failed — check the Deployments tab."
                 exit 1
                 ;;
-              502)
+              502|504)
+                # One bad week must not abandon the backfill. Older weeks are
+                # the slow ones, and a single timeout among twenty is worth
+                # noting and moving past — the rest still get written.
                 reason=$(jq -r '.failed[0].error // empty' response.json 2>/dev/null || true)
-                if [ -n "$reason" ]; then
-                  echo "::error::Reached the dashboard, but no week could be fetched. Jobber or QuickBooks said: ${reason}"
-                else
-                  echo "::error::Reached the dashboard, but no week could be fetched. See the response above."
-                fi
-                exit 1
-                ;;
-              504)
-                echo "::error::The dashboard timed out. /api/sync is meant to stop before Vercel's sixty-second limit, so this suggests a single week is taking too long."
-                exit 1
+                echo "::warning::Week ${skip} back did not sync (HTTP ${status}). ${reason}"
+                failures=$((failures + 1))
                 ;;
               *)
                 echo "::error::Unexpected HTTP ${status}."
@@ -148,14 +148,16 @@ jobs:
                 ;;
             esac
 
-            batch=$(jq -r '.written | length' response.json 2>/dev/null || echo 0)
-            total=$((total + batch))
-
-            next=$(jq -r '.nextSkip // empty' response.json 2>/dev/null || true)
-            if [ -z "$next" ]; then
-              break
-            fi
-            skip="$next"
+            skip=$((skip + 1))
           done
+
+          if [ "$total" -eq 0 ]; then
+            echo "::error::No week could be fetched at all. If the Jobber connection has expired, reconnect it in Settings."
+            exit 1
+          fi
+
+          if [ "$failures" -gt 0 ]; then
+            echo "::warning::${failures} week(s) could not be fetched; ${total} were."
+          fi
 
           echo "Refresh complete. ${total} week(s) written."
