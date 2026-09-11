@@ -32,6 +32,23 @@ export type Backend = "supabase" | "cookie" | "memory";
 /** Survives a warm invocation and nothing more. */
 const memory = new Map<string, StoredTokens>();
 
+/**
+ * A few seconds of memory, so one sync does not read the same row forty times.
+ *
+ * syncWeek reads the QuickBooks token for the access token, again for the
+ * company id, and again inside every API call — six or more reads per week of
+ * a row that cannot have changed in between. Twenty weeks of backfill turned
+ * that into hundreds of identical queries in a couple of minutes, and Supabase
+ * answered one of them with a Gateway Timeout. The dashboard then reported
+ * "QuickBooks is not connected", which was true of nothing at all.
+ *
+ * Ten seconds is long enough to cover a single sync and far too short to
+ * matter against a token that lives an hour. Writes update the cache rather
+ * than clearing it, so a refresh is immediately visible to its own process.
+ */
+const CACHE_MS = 10_000;
+const cache = new Map<string, { value: StoredTokens | null; at: number }>();
+
 export function backend(): Backend {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return "supabase";
@@ -85,6 +102,7 @@ export async function saveTokens(
       if (error) {
         throw new Error(`Could not save the ${provider} connection: ${error.message}`);
       }
+      cache.set(provider, { value: tokens, at: Date.now() });
       return;
     }
 
@@ -114,7 +132,29 @@ export async function saveTokens(
   }
 }
 
-export async function loadTokens(provider: string): Promise<StoredTokens | null> {
+export async function loadTokens(
+  provider: string,
+  options: {
+    /**
+     * Skip the cache.
+     *
+     * Required by the refresh-race recovery in jobber.ts and quickbooks.ts:
+     * those re-read specifically to find out whether ANOTHER instance has
+     * rotated the token, and a cached copy of what this instance already had
+     * would answer the wrong question and defeat the check entirely.
+     */
+    fresh?: boolean;
+  } = {},
+): Promise<StoredTokens | null> {
+  const hit = options.fresh ? undefined : cache.get(provider);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
+
+  const value = await readTokens(provider);
+  cache.set(provider, { value, at: Date.now() });
+  return value;
+}
+
+async function readTokens(provider: string): Promise<StoredTokens | null> {
   switch (backend()) {
     case "supabase": {
       const { data, error } = await serviceClient()

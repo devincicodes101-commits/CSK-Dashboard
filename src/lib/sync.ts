@@ -22,7 +22,11 @@ import {
 } from "./jobber-queries.ts";
 import { reconcile } from "./metric-rules.ts";
 import type { Problem } from "./types";
-import { type ComputedWeek, computeWeek } from "./week-metrics.ts";
+import {
+  CASH_MISSING_UNEXPLAINED,
+  type ComputedWeek,
+  computeWeek,
+} from "./week-metrics.ts";
 import { saveWeek } from "./week-store.ts";
 import { fetchAr, fetchCashBalance } from "./quickbooks-queries.ts";
 
@@ -230,7 +234,21 @@ export async function syncWeek(week: {
     severity: "warning",
   });
 
-  const result = { ...metrics, problems: [...metrics.problems, ...problems] };
+  /**
+   * A specific reason beats the generic one.
+   *
+   * computeWeek adds CASH_MISSING_UNEXPLAINED whenever the block is empty,
+   * because on its own it cannot know why. Here we often do — an expired
+   * connection, a report that would not read, a database timeout — and
+   * printing both leaves two warnings about one failure, the vaguer of which
+   * tends to be the one people act on.
+   */
+  const cashExplained = problems.some((p) => p.where === "Cash & AR");
+  const computed = cashExplained
+    ? metrics.problems.filter((p) => p.message !== CASH_MISSING_UNEXPLAINED)
+    : metrics.problems;
+
+  const result = { ...metrics, problems: [...computed, ...problems] };
 
   // Freeze it. Storing the records alongside the figures means a definition
   // change can be replayed over history without going back to Jobber, which

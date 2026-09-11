@@ -105,6 +105,23 @@ export interface ComputedWeek {
   readonly problems: readonly Problem[];
 }
 
+/**
+ * Said when the Cash & AR block is empty and nothing else has explained why.
+ *
+ * It used to assert "QuickBooks is not connected", and said it alongside the
+ * real reason — a Supabase read timing out mid-backfill. Two problems about
+ * one failure, one of them describing a connection that was working perfectly
+ * well, which sends whoever reads it off to reconnect something that is not
+ * broken.
+ *
+ * computeWeek cannot tell the difference: it is handed nulls and never learns
+ * why. So it says only what it knows, and syncWeek drops this line when it has
+ * a specific reason of its own — see the merge at the end of syncWeek.
+ */
+export const CASH_MISSING_UNEXPLAINED =
+  "No figures came back from QuickBooks for this week, and no reason was " +
+  "given. Check the connection in Settings.";
+
 export function computeWeek(sources: WeekSources): ComputedWeek {
   const { week, quotes, jobs, cards, quickBooks, quotesAreComplete } = sources;
   const problems: Problem[] = [];
@@ -168,7 +185,7 @@ export function computeWeek(sources: WeekSources): ComputedWeek {
   if (quickBooks.cashBalance === null && quickBooks.arTotal === null) {
     problems.push({
       where: "Cash & AR",
-      message: "QuickBooks is not connected, so this block has no figures.",
+      message: CASH_MISSING_UNEXPLAINED,
       severity: "warning",
     });
   }

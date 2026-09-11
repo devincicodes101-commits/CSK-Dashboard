@@ -150,7 +150,7 @@ export async function accessToken(): Promise<string> {
          * answers a spent token with 400 invalid_grant as readily as 401, and
          * a wasted read beats a connection that needs reconnecting by hand.
          */
-        const current = await loadTokens("quickbooks");
+        const current = await loadTokens("quickbooks", { fresh: true });
         const rotatedByAnother =
           current &&
           current.refreshToken !== stored.refreshToken &&

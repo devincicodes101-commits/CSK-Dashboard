@@ -198,7 +198,7 @@ export async function accessToken(): Promise<string> {
          * access token is the live one.
          */
         if (error instanceof ConnectionLost) {
-          const current = await loadTokens("jobber");
+          const current = await loadTokens("jobber", { fresh: true });
           const rotatedByAnother =
             current &&
             current.refreshToken !== stored.refreshToken &&
