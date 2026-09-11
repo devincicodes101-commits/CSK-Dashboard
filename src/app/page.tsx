@@ -205,6 +205,10 @@ export default async function Dashboard({
     <div className="min-h-screen">
       <div className="mx-auto max-w-[1440px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
         <div className="grid gap-5 lg:grid-cols-[236px_minmax(0,1fr)] lg:gap-6">
+          {/* The open-access banner that used to sit at the foot of this page was
+              removed at the client's request. The dashboard is still public
+              whenever DASHBOARD_PASSWORD is unset — the rail simply stops
+              offering a sign-out that would do nothing. */}
           <Sidebar sections={SECTIONS} authed={authConfigured()} />
 
           <div className="flex min-w-0 flex-col gap-5">
@@ -611,16 +615,6 @@ export default async function Dashboard({
                 ) : null}
               </>
             )}
-
-            {!authConfigured() ? (
-              <p className="rounded-xl border border-warn/40 bg-warn-tint px-5 py-4 font-mono text-[11px] leading-relaxed text-warn">
-                {/* Visible on the page rather than only in a README. Whoever
-                    opens this should know who else can. */}
-                This dashboard has no passphrase, so anyone with the link can
-                read these figures. Set DASHBOARD_PASSWORD in Vercel and
-                redeploy to require a sign-in.
-              </p>
-            ) : null}
           </div>
         </div>
       </div>
