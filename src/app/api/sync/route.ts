@@ -29,14 +29,23 @@ import { syncWeek } from "@/lib/sync";
  * instantly rather than costing the eight API calls and several seconds a
  * cold week costs.
  *
- * BACKFILL
+ * BACKFILL, AND THE SIXTY-SECOND WALL
  *
  *   /api/sync?weeks=12
+ *   /api/sync?weeks=12&skip=6     resume from the seventh week back
  *
- * Fetches the last twelve weeks instead of two, for filling the trend charts
- * in one go rather than clicking through the picker. Bounded at 26 — beyond
- * that the run is long enough to hit Vercel's function timeout, and a job
- * that dies halfway is worse than one that refuses.
+ * A cold week costs eight API calls and several seconds. Vercel's Hobby plan
+ * kills a function at sixty seconds, so asking for twenty weeks in one request
+ * returns a 504 having written some unknowable number of them — which is the
+ * worst of both worlds, because the caller cannot tell what succeeded.
+ *
+ * So the run watches the clock. It stops cleanly before the wall, reports the
+ * weeks it managed, and names the offset to resume from in `nextSkip`. A
+ * caller loops until that comes back null; the workflow in
+ * .github/workflows/refresh.yml does exactly that.
+ *
+ * Partial progress answers 200, not an error. Six weeks written out of twenty
+ * is six weeks of work done, and the response says precisely where it stopped.
  *
  * FAILURE
  *
@@ -46,7 +55,16 @@ import { syncWeek } from "@/lib/sync";
  * for a month.
  */
 
+/** Vercel Hobby's ceiling. Asking for more is refused at deploy time. */
 export const maxDuration = 60;
+
+/**
+ * Stop here rather than at the wall.
+ *
+ * Leaves room for the week in flight to finish and for the response to be
+ * written. Being killed mid-week loses the work and tells the caller nothing.
+ */
+const DEADLINE_MS = 45_000;
 
 function authorised(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET?.trim();
@@ -68,18 +86,35 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Not authorised." }, { status: 401 });
   }
 
-  const asked = Number(request.nextUrl.searchParams.get("weeks") ?? 2);
-  const count = Number.isFinite(asked) ? Math.min(Math.max(Math.trunc(asked), 1), 26) : 2;
+  const started = Date.now();
 
-  // Newest first: the current week matters most, and if the run is cut short
-  // by a timeout the weeks that got written are the ones people will open.
+  const number = (name: string, fallback: number) => {
+    const raw = Number(request.nextUrl.searchParams.get(name) ?? fallback);
+    return Number.isFinite(raw) ? Math.trunc(raw) : fallback;
+  };
+
+  const count = Math.min(Math.max(number("weeks", 2), 1), 104);
+  const skip = Math.max(number("skip", 0), 0);
+
+  // Newest first: the current week matters most, and a run cut short leaves
+  // the weeks people actually open already written.
   const thisMonday = mondayOf(new Date());
-  const mondays = Array.from({ length: count }, (_, i) => shiftWeek(thisMonday, -i));
+  const mondays = Array.from({ length: count }, (_, i) =>
+    shiftWeek(thisMonday, -(skip + i)),
+  );
 
   const written: string[] = [];
   const failed: { week: string; error: string }[] = [];
+  let nextSkip: number | null = null;
 
-  for (const monday of mondays) {
+  for (const [i, monday] of mondays.entries()) {
+    // Check before starting a week, never during. A week either completes or
+    // is left for the next call; there is no half-written week.
+    if (i > 0 && Date.now() - started > DEADLINE_MS) {
+      nextSkip = skip + i;
+      break;
+    }
+
     try {
       await syncWeek(weekFromMonday(monday));
       written.push(monday);
@@ -94,14 +129,19 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(
     {
       ranAt: new Date().toISOString(),
+      elapsedSeconds: Math.round((Date.now() - started) / 100) / 10,
       written,
       failed,
+      // Non-null means the run stopped early to stay inside the timeout. Call
+      // again with this as `skip` to carry on.
+      nextSkip,
       note:
-        "Only the current and most recent weeks are refreshed. Older weeks stay " +
-        "frozen as reported.",
+        "Only the current and most recent weeks are refreshed by the schedule. " +
+        "Older weeks stay frozen as reported.",
     },
-    // A run where nothing was written is a failed run, and should read as one
-    // in Vercel's cron log rather than as a green tick.
+    // Partial progress is progress. Only a run that wrote nothing at all is a
+    // failure, and it should read as one in the cron log rather than as a
+    // green tick.
     { status: failed.length > 0 && written.length === 0 ? 502 : 200 },
   );
 }
