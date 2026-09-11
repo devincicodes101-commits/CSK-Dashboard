@@ -152,6 +152,37 @@ export async function loadRecentWeeks(
 }
 
 /**
+ * The weeks the trend charts draw, oldest first.
+ *
+ * Anchored on the week being viewed and reaching backwards, because the
+ * interesting question is how this week compares with the ones before it.
+ *
+ * But reaching backwards alone leaves the earliest stored week with nothing
+ * behind it and an empty chart that says a trend needs two readings — which
+ * is true and useless, since eighteen later weeks are sitting right there.
+ * So when there is not enough history, the window extends forwards instead.
+ * The anchor is still marked on the chart, so it stays obvious which week the
+ * figures above belong to.
+ */
+export async function loadTrendWeeks(
+  anchor: string,
+  limit = 14,
+): Promise<StoredWeek[]> {
+  const before = await loadRecentWeeks(anchor, limit);
+  if (before.length >= limit || !available()) return before;
+
+  const { data, error } = await serviceClient()
+    .from("week_snapshots")
+    .select("*")
+    .gt("week_start", anchor)
+    .order("week_start", { ascending: true })
+    .limit(limit - before.length);
+
+  if (error) return before;
+  return [...before, ...(data ?? []).map((row) => toStoredWeek(row as Row))];
+}
+
+/**
  * Writes a computed week.
  *
  * `raw` keeps the quotes and jobs the figures came from, so a week can be

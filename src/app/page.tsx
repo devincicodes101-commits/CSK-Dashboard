@@ -14,7 +14,7 @@ import { Sidebar, type Section } from "@/components/Sidebar";
 import { computeWeek, count, money, percent } from "@/lib/week-metrics";
 import { SYNC_VERSION, syncWeek } from "@/lib/sync";
 import { authConfigured } from "@/lib/auth";
-import { loadRecentWeeks, loadWeek, syncedWeeks } from "@/lib/week-store";
+import { loadTrendWeeks, loadWeek, syncedWeeks } from "@/lib/week-store";
 import { TokenExpired } from "@/lib/token-store";
 import { redirect } from "next/navigation";
 import { weekFromParam, weekLabelWithYear } from "@/lib/periods";
@@ -186,8 +186,11 @@ export default async function Dashboard({
    * Order matters: syncWeek writes its snapshot before returning, so reading
    * afterwards includes the week being viewed. Reading first would draw every
    * chart one week short of the figures printed above it.
+   *
+   * Anchored on this week and reaching backwards, extending forwards when
+   * there is not enough history behind it — see loadTrendWeeks.
    */
-  const trend = await loadRecentWeeks(week.start, 14);
+  const trend = await loadTrendWeeks(week.start, 14);
   const labels = trend.map((w) => axisLabel(w.metrics.week.start));
   const series = (pick: (m: (typeof trend)[number]["metrics"]) => number | null) =>
     trend.map((w) => pick(w.metrics));
