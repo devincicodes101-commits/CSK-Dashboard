@@ -1,4 +1,4 @@
-import type { Week } from "./metric-rules";
+import type { Week } from "./metric-rules.ts";
 
 /**
  * CSK's annual plan, and what it means for one week.

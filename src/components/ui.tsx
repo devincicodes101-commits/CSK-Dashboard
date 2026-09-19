@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Delta, Sparkline } from "./charts";
 import { against } from "@/lib/targets";
+import type { MonthToDate } from "@/lib/month-to-date";
 
 /**
  * A block is the unit of distribution, not just of layout.
@@ -332,5 +333,110 @@ export function StatIcon({ path }: { path: string }) {
     >
       <path d={path} />
     </svg>
+  );
+}
+
+
+/**
+ * The month so far against the month's plan.
+ *
+ * Sits above the weekly blocks because it answers a different question. A
+ * week says how last week went; this says whether CSK are on plan, which is
+ * what a target is for and what a single week cannot tell you — the week of
+ * 3 August reads 21% of its revenue target and August finished at 82%.
+ *
+ * Bars are capped at full width but the figure is not, so beating plan reads
+ * as beating plan rather than as a bar that looks the same as exactly hitting
+ * it.
+ */
+export function MonthProgress({
+  data,
+  money,
+}: {
+  data: MonthToDate;
+  money: (value: number | null) => string;
+}) {
+  const partial = data.weeksCounted < data.weeksElapsed;
+
+  return (
+    <section className="card p-5 sm:p-6">
+      <header className="mb-5 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+        <div>
+          <h3 className="font-display text-[15px] font-semibold tracking-tight text-ink">
+            {data.month} &mdash; month to date
+          </h3>
+          <p className="mt-1 font-mono text-[11px] leading-relaxed text-ink-3">
+            {data.weeksCounted === 1
+              ? "One week into the month, against that week's share of the plan."
+              : `${data.weeksCounted} weeks so far, against their share of the plan.`}
+          </p>
+        </div>
+        {partial ? (
+          <Pill tone="warn">
+            {`${data.weeksElapsed - data.weeksCounted} week${
+              data.weeksElapsed - data.weeksCounted === 1 ? "" : "s"
+            } not fetched`}
+          </Pill>
+        ) : null}
+      </header>
+
+      <dl className="flex flex-col gap-4">
+        {data.rows.map((row) => {
+          const standing = against(row.actual, row.target);
+          const show = (v: number | null) =>
+            row.kind === "money" ? money(v) : v === null ? "—" : String(Math.round(v));
+
+          const bar = standing
+            ? standing.tone === "good"
+              ? "bg-accent"
+              : standing.tone === "warn"
+                ? "bg-warn"
+                : "bg-bad"
+            : "bg-line-strong";
+
+          return (
+            <div key={row.label} className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+                <dt className="micro text-ink-3">{row.label}</dt>
+                <dd className="tnum flex items-baseline gap-2 font-mono text-[11px]">
+                  <span className="font-display text-[13px] font-semibold text-ink">
+                    {show(row.actual)}
+                  </span>
+                  <span className="text-ink-4">{`of ${show(row.target)}`}</span>
+                  {standing ? (
+                    <span
+                      className={
+                        standing.tone === "good"
+                          ? "text-good"
+                          : standing.tone === "warn"
+                            ? "text-warn"
+                            : "text-bad"
+                      }
+                    >
+                      {`${Math.round(standing.ratio * 100)}%`}
+                    </span>
+                  ) : null}
+                </dd>
+              </div>
+
+              <div
+                className="h-1.5 overflow-hidden rounded-full bg-raised"
+                role="img"
+                aria-label={`${row.label}: ${show(row.actual)} of ${show(row.target)}`}
+              >
+                <div
+                  className={`h-full rounded-full ${bar}`}
+                  style={{
+                    width: standing
+                      ? `${Math.min(standing.ratio, 1) * 100}%`
+                      : "0%",
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </dl>
+    </section>
   );
 }

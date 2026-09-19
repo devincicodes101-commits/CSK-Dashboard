@@ -7,6 +7,7 @@ import {
   StatCard,
   StatIcon,
   TargetNote,
+  MonthProgress,
   Button,
 } from "@/components/ui";
 import { AreaTrend, Donut, GroupedBars, compact } from "@/components/charts";
@@ -20,6 +21,7 @@ import { TokenExpired } from "@/lib/token-store";
 import { redirect } from "next/navigation";
 import { weekFromParam, weekLabelWithYear } from "@/lib/periods";
 import { RATIO_TARGETS, weeklyTargets } from "@/lib/targets";
+import { monthToDate } from "@/lib/month-to-date";
 import {
   JOBBER_DISPLAYED,
   VERIFIED_CARDS,
@@ -221,6 +223,25 @@ export default async function Dashboard({
   const plan = weeklyTargets(week);
 
   /**
+   * The month so far, from the weeks already loaded for the charts.
+   *
+   * No extra query: loadTrendWeeks reaches back fourteen weeks, which always
+   * covers the month containing the anchor.
+   */
+  const month = monthToDate(
+    trend.map((w) => ({
+      start: w.metrics.week.start,
+      end: w.metrics.week.end,
+      newLeads: w.metrics.newLeads,
+      quotesSentCount: w.metrics.quotesSentCount,
+      wonCount: w.metrics.wonCount,
+      wonValue: w.metrics.wonValue,
+      revenueClosed: w.metrics.revenueClosed,
+    })),
+    week.start,
+  );
+
+  /**
    * The reading immediately before this one, for the change badges.
    *
    * Found relative to the anchor, NOT as the second-to-last of the window.
@@ -406,6 +427,11 @@ export default async function Dashboard({
                     }
                   />
                 </div>
+
+                {/* ------------------------------------- against the plan -- */}
+                {month.weeksCounted > 0 ? (
+                  <MonthProgress data={month} money={money} />
+                ) : null}
 
                 {/* --------------------------------------------- charts -- */}
                 <AreaTrend

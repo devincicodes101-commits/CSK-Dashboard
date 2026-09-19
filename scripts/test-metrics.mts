@@ -51,6 +51,7 @@ import {
   RATIO_TARGETS,
   weeklyTargets,
 } from "../src/lib/targets.ts";
+import { monthToDate, type WeekFigures } from "../src/lib/month-to-date.ts";
 
 /* ------------------------------------------------------------- test runner */
 
@@ -391,6 +392,73 @@ for (let i = 0; i < 52; i += 1) {
   yearOfWeeks += weeklyTargets({ start: iso, end: sunday }).revenue;
 }
 close("52 weeks of revenue target", yearOfWeeks, ANNUAL_PLAN.produced, 40_000);
+
+/* ------------------------------------------------------------ month to date */
+
+section("Month to date adds the weeks up and matches their targets");
+
+const augustWeek = (start: string, end: string, revenue: number, leads: number | null): WeekFigures => ({
+  start, end, revenueClosed: revenue, newLeads: leads,
+  quotesSentCount: 6, wonCount: 3, wonValue: 6_442,
+});
+
+// August 2026 begins on a Saturday, so its Mondays are 3, 10, 17, 24 and 31.
+const augustStored = [
+  augustWeek("2026-08-03", "2026-08-09", 11_404, 12),
+  augustWeek("2026-08-10", "2026-08-16", 65_925, 15),
+  augustWeek("2026-08-17", "2026-08-23", 33_843, null),
+];
+
+const mtd = monthToDate(augustStored, "2026-08-17");
+check("names the month", mtd.month, "August 2026");
+check("three Mondays had passed by the 17th", mtd.weeksElapsed, 3);
+check("and all three are stored", mtd.weeksCounted, 3);
+
+const revenue = mtd.rows.find((r) => r.label === "Revenue — jobs closed")!;
+close("revenue is the three weeks added", revenue.actual, 11_404 + 65_925 + 33_843, 0.01);
+// Three whole weeks of August: 21 of its 31 days.
+close("target is those same three weeks", revenue.target, (242_640 / 31) * 21, 0.01);
+
+// A week nobody fetched must not read as a shortfall: the target shrinks with
+// the actuals, and weeksCounted says the view is partial.
+const partial = monthToDate(augustStored.slice(0, 2), "2026-08-17");
+check("a missing week is reported, not absorbed", `${partial.weeksCounted}/${partial.weeksElapsed}`, "2/3");
+close(
+  "and the target covers only the weeks present",
+  partial.rows.find((r) => r.label === "Revenue — jobs closed")!.target,
+  (242_640 / 31) * 14,
+  0.01,
+);
+
+// Leads were recorded in two of the three weeks. A partial figure is worth
+// showing; a column never recorded at all must stay null rather than read 0.
+const leads = mtd.rows.find((r) => r.label === "New leads")!;
+check("leads sum what was recorded", leads.actual, 27);
+const noLeads = monthToDate(
+  [augustWeek("2026-08-03", "2026-08-09", 11_404, null)],
+  "2026-08-03",
+);
+check(
+  "a column with nothing recorded stays null, never zero",
+  noLeads.rows.find((r) => r.label === "New leads")!.actual,
+  null,
+);
+
+section("A week counts towards the month its Monday falls in");
+// 28 September starts a week running into October. It belongs to September.
+const straddles = monthToDate(
+  [augustWeek("2026-09-28", "2026-10-04", 50_000, 10)],
+  "2026-09-28",
+);
+check("counted in September", straddles.weeksCounted, 1);
+check("labelled September", straddles.month, "September 2026");
+// Its target still spans both months' plans, because its actuals do too.
+close(
+  "target draws on both months",
+  straddles.rows.find((r) => r.label === "Revenue — jobs closed")!.target,
+  (264_640 / 30) * 3 + (264_640 / 31) * 4,
+  0.01,
+);
 
 /* --------------------------------------------------------------------- done */
 
