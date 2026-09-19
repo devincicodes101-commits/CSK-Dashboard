@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Delta, Sparkline } from "./charts";
+import { against } from "@/lib/targets";
 
 /**
  * A block is the unit of distribution, not just of layout.
@@ -89,15 +90,58 @@ export function Metrics({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * A figure against CSK's plan.
+ *
+ * Shows the target and how close the week came, in that order — the target is
+ * the fact, the percentage is the reading of it. Both stay small: the actual
+ * figure is what Chase screenshots, and a target that competes with it for
+ * attention makes the block harder to send.
+ *
+ * Renders the target with no percentage when there is no figure to compare.
+ * A week with nothing to report has not missed anything, and colouring an
+ * absent number red turns a gap in the data into an argument about
+ * performance.
+ */
+export function TargetNote({
+  actual,
+  target,
+  format,
+}: {
+  actual: number | null;
+  target: number;
+  format: (value: number) => string;
+}) {
+  const standing = against(actual, target);
+
+  const tone = !standing
+    ? "text-ink-4"
+    : standing.tone === "good"
+      ? "text-good"
+      : standing.tone === "warn"
+        ? "text-warn"
+        : "text-bad";
+
+  return (
+    <p className={`tnum font-mono text-[11px] leading-none ${tone}`}>
+      {`target ${format(target)}`}
+      {standing ? ` · ${Math.round(standing.ratio * 100)}%` : null}
+    </p>
+  );
+}
+
 export function Metric({
   label,
   value,
   hint,
+  target,
   tone = "plain",
 }: {
   label: string;
   value: string;
   hint?: string;
+  /** CSK's plan for this figure, this week. See TargetNote. */
+  target?: ReactNode;
   tone?: "plain" | "good" | "warn" | "bad" | "muted";
 }) {
   const toneClass = {
@@ -119,6 +163,7 @@ export function Metric({
       {hint ? (
         <p className="tnum font-mono text-[11px] leading-none text-ink-4">{hint}</p>
       ) : null}
+      {target}
     </div>
   );
 }
@@ -220,6 +265,7 @@ export function StatCard({
   goodWhen = "up",
   unit = "amount",
   tone = "accent",
+  target,
   footnote,
 }: {
   label: string;
@@ -232,6 +278,8 @@ export function StatCard({
   /** "rate" where the headline is already a percentage. See Delta. */
   unit?: "amount" | "rate";
   tone?: "accent" | "blue";
+  /** CSK's plan for this figure, this week. See TargetNote. */
+  target?: ReactNode;
   footnote?: string;
 }) {
   return (
@@ -258,6 +306,8 @@ export function StatCard({
         </div>
         <Sparkline values={history} tone={tone} />
       </div>
+
+      {target ? <div className="border-t border-line pt-3">{target}</div> : null}
 
       {footnote ? (
         <p className="font-mono text-[11px] leading-relaxed text-ink-4">{footnote}</p>

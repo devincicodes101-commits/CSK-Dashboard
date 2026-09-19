@@ -6,6 +6,7 @@ import {
   Pill,
   StatCard,
   StatIcon,
+  TargetNote,
   Button,
 } from "@/components/ui";
 import { AreaTrend, Donut, GroupedBars, compact } from "@/components/charts";
@@ -18,6 +19,7 @@ import { loadTrendWeeks, loadWeek, syncedWeeks } from "@/lib/week-store";
 import { TokenExpired } from "@/lib/token-store";
 import { redirect } from "next/navigation";
 import { weekFromParam, weekLabelWithYear } from "@/lib/periods";
+import { RATIO_TARGETS, weeklyTargets } from "@/lib/targets";
 import {
   JOBBER_DISPLAYED,
   VERIFIED_CARDS,
@@ -69,6 +71,16 @@ function axisLabel(monday: string): string {
   const [, m, d] = monday.split("-");
   return Number(d) + " " + (MONTHS[Number(m) - 1] ?? "");
 }
+
+/**
+ * How a target prints.
+ *
+ * Counts are whole: a plan of 20.5 quotes reads "21", because nobody sends
+ * half a quote and the fraction is an artefact of cutting a month into
+ * sevenths rather than something CSK asked for.
+ */
+const WHOLE = (value: number) => String(Math.round(value));
+const RATE = (value: number) => `${(value * 100).toFixed(0)}%`;
 
 export default async function Dashboard({
   searchParams,
@@ -200,6 +212,15 @@ export default async function Dashboard({
   const here = trend.findIndex((w) => w.metrics.week.start === week.start);
 
   /**
+   * This week's share of CSK's annual plan.
+   *
+   * Counted day by day, so a week spanning the turn of a month draws on both
+   * — see weeklyTargets. The ratios are not pro-rated, because a conversion
+   * rate is the same rate whatever period it is measured over.
+   */
+  const plan = weeklyTargets(week);
+
+  /**
    * The reading immediately before this one, for the change badges.
    *
    * Found relative to the anchor, NOT as the second-to-last of the window.
@@ -328,6 +349,13 @@ export default async function Dashboard({
                     current={metrics.revenueClosed}
                     previous={prior?.revenueClosed ?? null}
                     history={revenueHistory}
+                    target={
+                      <TargetNote
+                        actual={metrics.revenueClosed}
+                        target={plan.revenue}
+                        format={money}
+                      />
+                    }
                     footnote={`${metrics.jobsClosed} jobs closed this week`}
                   />
                   <StatCard
@@ -349,6 +377,13 @@ export default async function Dashboard({
                     history={winHistory}
                     unit="rate"
                     tone="blue"
+                    target={
+                      <TargetNote
+                        actual={metrics.conversionRate}
+                        target={RATIO_TARGETS.salesRatio}
+                        format={RATE}
+                      />
+                    }
                     footnote={`${count(metrics.wonCount)} won of ${count(metrics.quotesSentCount)} sent`}
                   />
                   <StatCard
@@ -489,19 +524,66 @@ export default async function Dashboard({
                       wording only makes him stop to check whether it means the
                       same. */}
                   <Metrics>
-                    <Metric label="New Leads" value={count(metrics.newLeads)} />
-                    <Metric label="Quotes Sent" value={count(metrics.quotesSentCount)} />
+                    <Metric
+                      label="New Leads"
+                      value={count(metrics.newLeads)}
+                      target={
+                        <TargetNote
+                          actual={metrics.newLeads}
+                          target={plan.leads}
+                          format={WHOLE}
+                        />
+                      }
+                    />
+                    <Metric
+                      label="Quotes Sent"
+                      value={count(metrics.quotesSentCount)}
+                      target={
+                        <TargetNote
+                          actual={metrics.quotesSentCount}
+                          target={plan.quotesSent}
+                          format={WHOLE}
+                        />
+                      }
+                    />
                     <Metric label="Quotes Converted (#)" value={count(metrics.convertedCount)} />
                     <Metric label="Quotes Approved (#)" value={count(metrics.approvedCount)} />
-                    <Metric label="Total Quotes Won (#)" value={count(metrics.wonCount)} />
+                    <Metric
+                      label="Total Quotes Won (#)"
+                      value={count(metrics.wonCount)}
+                      target={
+                        <TargetNote
+                          actual={metrics.wonCount}
+                          target={plan.quotesWon}
+                          format={WHOLE}
+                        />
+                      }
+                    />
                     <Metric
                       label="Quote Conversion %"
                       value={percent(metrics.conversionRate)}
                       tone="good"
+                      target={
+                        <TargetNote
+                          actual={metrics.conversionRate}
+                          target={RATIO_TARGETS.salesRatio}
+                          format={RATE}
+                        />
+                      }
                     />
                     <Metric label="Quotes Converted ($)" value={money(metrics.convertedValue)} />
                     <Metric label="Quotes Approved ($)" value={money(metrics.approvedValue)} />
-                    <Metric label="Total Quotes won ($)" value={money(metrics.wonValue)} />
+                    <Metric
+                      label="Total Quotes won ($)"
+                      value={money(metrics.wonValue)}
+                      target={
+                        <TargetNote
+                          actual={metrics.wonValue}
+                          target={plan.wonValue}
+                          format={money}
+                        />
+                      }
+                    />
                     <Metric label="Quotes Sent ($)" value={money(metrics.quotesSentValue)} />
                   </Metrics>
                 </Block>
@@ -545,6 +627,13 @@ export default async function Dashboard({
                       label="Revenue — Jobs Closed ($)"
                       value={money(metrics.revenueClosed)}
                       hint={`${metrics.jobsClosed} jobs`}
+                      target={
+                        <TargetNote
+                          actual={metrics.revenueClosed}
+                          target={plan.revenue}
+                          format={money}
+                        />
+                      }
                     />
                     <Metric label="Labor Cost ($)" value={money(metrics.labourCost)} />
                     <Metric label="Material Cost ($)" value={money(metrics.materialCost)} />

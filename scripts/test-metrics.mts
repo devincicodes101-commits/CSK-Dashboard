@@ -45,6 +45,12 @@ import {
   VERIFIED_WEEK_MONDAY,
 } from "../src/lib/verified-week.ts";
 import { computeWeek } from "../src/lib/week-metrics.ts";
+import {
+  ANNUAL_PLAN,
+  MONTHLY_PLAN,
+  RATIO_TARGETS,
+  weeklyTargets,
+} from "../src/lib/targets.ts";
 
 /* ------------------------------------------------------------- test runner */
 
@@ -326,6 +332,65 @@ check(
   impossible.problems.some((p) => p.where === "Win rate" && p.severity === "error"),
   true,
 );
+
+/* ------------------------------------------------------------------ targets */
+
+/**
+ * CSK's annual plan has to agree with itself.
+ *
+ * The plan is transcribed by hand from two screenshots, so a mistyped digit
+ * is the likeliest fault in the whole module and would silently set the wrong
+ * bar for a year. Every summary figure on their own sheets is derivable from
+ * the monthly rows, so each one is a check on the transcription.
+ */
+section("CSK's plan reconciles against its own summary panels");
+
+const sum = (pick: (m: (typeof MONTHLY_PLAN)[number]) => number) =>
+  MONTHLY_PLAN.reduce((t, m) => t + pick(m), 0);
+
+check("twelve months of plan", MONTHLY_PLAN.length, 12);
+check("$ booked totals New Sales", sum((m) => m.booked), ANNUAL_PLAN.newSales);
+check(
+  "new sales plus carry over is total sales",
+  ANNUAL_PLAN.newSales + ANNUAL_PLAN.carryOverSales,
+  ANNUAL_PLAN.totalSales,
+);
+// Their $3,000,000 is the round figure; the months add to 2,999,680.
+close("$ produced is the stated 3m", sum((m) => m.produced), ANNUAL_PLAN.produced, 400);
+close("lead conversion is 79%", sum((m) => m.estimates) / sum((m) => m.leads), RATIO_TARGETS.leadConversion, 0.005);
+close("sales ratio is 67%", sum((m) => m.jobsBooked) / sum((m) => m.estimates), RATIO_TARGETS.salesRatio, 0.005);
+close("average job size is $5,681", sum((m) => m.booked) / sum((m) => m.jobsBooked), RATIO_TARGETS.averageJobSize, 10);
+close("charge rate is $102.33/hr", sum((m) => m.produced) / sum((m) => m.hours), RATIO_TARGETS.chargeRatePerHour, 0.05);
+
+section("A week takes its share of the month, not a flat twelfth");
+
+// August 2026 has 31 days; the plan is 91 leads. A whole week inside it is
+// seven thirty-firsts of that.
+const inAugust = weeklyTargets({ start: "2026-08-03", end: "2026-08-09" });
+close("a full August week", inAugust.leads, (91 / 31) * 7, 0.001);
+
+// 28 September to 4 October: three days of September, four of October. Both
+// months plan 102 leads, so the total is the same — but the machinery has to
+// walk the days to get there, and the revenue split proves it did.
+const straddling = weeklyTargets({ start: "2026-09-28", end: "2026-10-04" });
+close(
+  "a week straddling the month end",
+  straddling.revenue,
+  (264_640 / 30) * 3 + (264_640 / 31) * 4,
+  0.01,
+);
+
+// Fifty-two weekly targets must add to roughly the annual plan. Not exactly:
+// 52 weeks is 364 days and a year is 365.
+section("The weekly targets add back up to the year");
+let yearOfWeeks = 0;
+for (let i = 0; i < 52; i += 1) {
+  const monday = new Date(Date.UTC(2026, 6, 6) + i * 7 * 86_400_000);
+  const iso = monday.toISOString().slice(0, 10);
+  const sunday = new Date(monday.getTime() + 6 * 86_400_000).toISOString().slice(0, 10);
+  yearOfWeeks += weeklyTargets({ start: iso, end: sunday }).revenue;
+}
+close("52 weeks of revenue target", yearOfWeeks, ANNUAL_PLAN.produced, 40_000);
 
 /* --------------------------------------------------------------------- done */
 
